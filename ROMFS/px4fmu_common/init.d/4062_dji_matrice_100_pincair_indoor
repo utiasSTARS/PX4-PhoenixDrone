@@ -21,6 +21,9 @@ then
 	param set MPC_Z_VEL_UP 1.0
 	param set MPC_XZ_VEL_MAX 1.0
 
+	# slow down landings
+	param set MPC_LAND_SPEED 0.5
+
 	# lower default waypoint acceptance for indoor flight
 	param set NAV_ACC_RAD 1.0
 fi
