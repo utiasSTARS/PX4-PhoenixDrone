@@ -1,0 +1,26 @@
+#!nsh
+#
+# @name DJI Matrice 100 pincair indoor
+#
+# @type Quadrotor x
+#
+# @output AUX1 feed-through of RC AUX1 channel
+# @output AUX2 feed-through of RC AUX2 channel
+# @output AUX3 feed-through of RC AUX3 channel
+#
+# @maintainer James Goppert <james.goppert@gmail.com>
+#
+
+# derives from outdoor config
+sh /etc/init.d/4061_dji_matrice_100_outdoor
+
+if [ $AUTOCNF == yes ]
+then
+	# lower speeds for indoor flight
+	param set MPC_Z_VEL_MAX 1.0
+	param set MPC_Z_VEL_UP 1.0
+	param set MPC_XZ_VEL_MAX 1.0
+
+	# lower default waypoint acceptance for indoor flight
+	param set NAV_ACC_RAD 1.0
+fi
