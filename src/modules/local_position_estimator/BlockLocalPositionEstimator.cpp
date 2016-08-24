@@ -17,6 +17,8 @@ static const uint32_t 		EST_STDDEV_Z_VALID = 2.0; // 2.0 m
 static const uint32_t 		EST_STDDEV_TZ_VALID = 2.0; // 2.0 m
 static const bool integrate = true; // use accel for integrating
 
+static const float P_MAX = 1.0e6f; // max allowed value in state covariance
+
 BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	// this block has no parent, and has name LPE
 	SuperBlock(NULL, "LPE"),
@@ -850,6 +852,26 @@ void BlockLocalPositionEstimator::predict()
 	_P += (_A * _P + _P * _A.transpose() +
 	       _B * _R * _B.transpose() +
 	       _Q) * getDt();
+
+	// condition P
+	for (int i = 0; i < n_x; i++) {
+		for (int j = 0; j < i; j++) {
+			if (_P(i, j) < 0) {
+				_P(i, j) = 0;
+
+			} else if (_P(i, j) > P_MAX) {
+				_P(i, j) = P_MAX;
+
+			} else if (!PX4_ISFINITE(_P(i, j))) {
+				_P(i, j) = 0;
+			}
+
+			if (i != j) {
+				_P(j, i) = _P(i, j);
+			}
+		}
+	}
+
 	_xLowPass.update(_x);
 	_aglLowPass.update(agl());
 }
