@@ -11,8 +11,7 @@
 # @maintainer James Goppert <james.goppert@gmail.com>
 #
 
-# derives from outdoor config
-sh /etc/init.d/4061_pinc_matrice_100_outdoor
+sh /etc/init.d/4001_quad_x
 
 if [ $AUTOCNF == yes ]
 then
