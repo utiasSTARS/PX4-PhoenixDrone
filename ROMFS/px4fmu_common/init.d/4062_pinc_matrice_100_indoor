@@ -16,14 +16,32 @@ sh /etc/init.d/4061_pinc_matrice_100_outdoor
 
 if [ $AUTOCNF == yes ]
 then
-	# lower speeds for indoor flight
+	param set MC_ROLL_P 6.5
+	param set MC_ROLLRATE_P 0.05
+	param set MC_ROLLRATE_I 0.05
+	param set MC_ROLLRATE_D 0.001
+	param set MC_PITCH_P 6.5
+	param set MC_PITCHRATE_P 0.05
+	param set MC_PITCHRATE_I 0.05
+	param set MC_PITCHRATE_D 0.001
+	param set MC_YAWRATE_P 0.2
+	param set MC_YAWRATE_I 0.0
+	param set MC_YAWRATE_D 0.0
+	param set BAT_N_CELLS 6
+	param set PWM_MIN 1200
+
+	param set BAT_V_EMTPY 3.0
+	param set MIS_YAWMODE 0
+	param set MIS_TAKEOFF_ALT 2.0
+	param set MPC_THR_HOVER 0.65
+	param set SENS_EN_SFOX 1
+	param set COMPANION 921600
+	param set SYS_MC_EST_GROUP 1
+	param set LPE_GPS_ON 1
+
 	param set MPC_Z_VEL_MAX 1.0
 	param set MPC_Z_VEL_UP 1.0
 	param set MPC_XZ_VEL_MAX 1.0
-
-	# slow down landings
 	param set MPC_LAND_SPEED 0.5
-
-	# lower default waypoint acceptance for indoor flight
 	param set NAV_ACC_RAD 1.0
 fi

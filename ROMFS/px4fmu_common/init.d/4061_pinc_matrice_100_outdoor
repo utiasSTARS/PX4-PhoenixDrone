@@ -11,40 +11,34 @@
 # @maintainer James Goppert <james.goppert@gmail.com>
 #
 
-# derives from standard matrice config
-sh /etc/init.d/4060_dji_matrice_100
+sh /etc/init.d/4001_quad_x
 
 if [ $AUTOCNF == yes ]
 then
-	# don't warn about battery so soon
+	param set MC_ROLL_P 6.5
+	param set MC_ROLLRATE_P 0.05
+	param set MC_ROLLRATE_I 0.05
+	param set MC_ROLLRATE_D 0.001
+	param set MC_PITCH_P 6.5
+	param set MC_PITCHRATE_P 0.05
+	param set MC_PITCHRATE_I 0.05
+	param set MC_PITCHRATE_D 0.001
+	param set MC_YAWRATE_P 0.2
+	param set MC_YAWRATE_I 0.0
+	param set MC_YAWRATE_D 0.0
+	param set BAT_N_CELLS 6
+	param set PWM_MIN 1200
+
 	param set BAT_V_EMTPY 3.0
-
-	# keep commanded yaw direction, don't rotate to waypoint
 	param set MIS_YAWMODE 0
-
-	# lower max takeoff to 2m
 	param set MIS_TAKEOFF_ALT 2.0
-
-	# increase hover thrust to account for payload
 	param set MPC_THR_HOVER 0.65
-
-	# set speeds for outdoor flight
 	param set MPC_Z_VEL_MAX 2.0
 	param set MPC_Z_VEL_UP 2.0
 	param set MPC_XY_VEL_MAX 3.0
-
-	# enable sf10a lidar
 	param set SENS_EN_SFOX 1
-
-	# setup baudrate for comms with companion computer
 	param set COMPANION 921600
-
-	# make sure we are using LPE estimator
 	param set SYS_MC_EST_GROUP 1
-
-	# require GPS for navigation
 	param set LPE_GPS_ON 1
-
-	# lower nav acc to force us to fly closer to waypoints, defaults to 10m if not set
 	param set NAV_ACC_RAD 1.5
 fi
