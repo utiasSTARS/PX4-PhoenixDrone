@@ -853,20 +853,24 @@ void BlockLocalPositionEstimator::predict()
 	       _Q) * getDt();
 
 	// condition P
-	for (int i=0; i<n_x; i++) {
-		for (int j=0; j<i; j++) {
+	for (int i = 0; i < n_x; i++) {
+		for (int j = 0; j < i; j++) {
 			if (_P(i, j) < 0) {
-				_P(i,j) = 0;
-			} else if (_P(i,j) > P_MAX) {
-				_P(i,j) = P_MAX;
-			} else if (!PX4_ISFINITE(_P(i,j))) {
-				_P(i,j) = 0;
+				_P(i, j) = 0;
+
+			} else if (_P(i, j) > P_MAX) {
+				_P(i, j) = P_MAX;
+
+			} else if (!PX4_ISFINITE(_P(i, j))) {
+				_P(i, j) = 0;
 			}
+
 			if (i != j) {
-				_P(j, i) = _P(i,j);
+				_P(j, i) = _P(i, j);
 			}
 		}
 	}
+
 	_xLowPass.update(_x);
 	_aglLowPass.update(agl());
 }
