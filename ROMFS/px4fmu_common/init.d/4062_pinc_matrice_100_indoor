@@ -12,7 +12,7 @@
 #
 
 # derives from outdoor config
-sh /etc/init.d/4061_dji_matrice_100_outdoor
+sh /etc/init.d/4061_pinc_matrice_100_outdoor
 
 if [ $AUTOCNF == yes ]
 then
