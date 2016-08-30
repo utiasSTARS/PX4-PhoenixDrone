@@ -41,5 +41,6 @@ then
 	param set SYS_COMPANION 921600
 	param set SYS_MC_EST_GROUP 1
 	param set LPE_GPS_ON 0
+	param set LPE_PUB_AGL_Z 1
 	param set NAV_ACC_RAD 1.0
 fi
