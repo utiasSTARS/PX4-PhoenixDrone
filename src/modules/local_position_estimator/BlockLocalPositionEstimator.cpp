@@ -56,6 +56,7 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_map_ref(),
 
 	// block parameters
+	_pub_agl_z(this, "PUB_AGL_Z"),
 	_xy_pub_thresh(this, "XY_PUB"),
 	_z_pub_thresh(this, "Z_PUB"),
 	_sonar_z_stddev(this, "SNR_Z"),
@@ -674,7 +675,11 @@ void BlockLocalPositionEstimator::publishLocalPos()
 		_pub_lpos.get().v_z_valid = _validZ;
 		_pub_lpos.get().x = xLP(X_x); 	// north
 		_pub_lpos.get().y = xLP(X_y);  	// east
-		_pub_lpos.get().z = xLP(X_z); 	// down
+		if (_pub_agl_z.get()) {
+			_pub_lpos.get().z = -_aglLowPass.getState(); // agl
+		} else {
+			_pub_lpos.get().z = xLP(X_z); 	// down
+		}
 		_pub_lpos.get().vx = xLP(X_vx); // north
 		_pub_lpos.get().vy = xLP(X_vy); // east
 		_pub_lpos.get().vz = xLP(X_vz); // down

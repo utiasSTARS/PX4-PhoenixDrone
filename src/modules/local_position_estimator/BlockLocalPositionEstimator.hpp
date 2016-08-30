@@ -244,6 +244,7 @@ private:
 	struct map_projection_reference_s _map_ref;
 
 	// general parameters
+	BlockParamInt  _pub_agl_z;
 	BlockParamFloat  _xy_pub_thresh;
 	BlockParamFloat  _z_pub_thresh;
 

@@ -2,6 +2,13 @@
 
 // 16 is max name length
 
+/**
+ * Publish AGL as Z
+ *
+ * @group Local Position Estimator
+ * @boolean
+ */
+PARAM_DEFINE_FLOAT(LPE_PUB_AGL_Z, 0);
 
 /**
  * Optical flow z offset from center
