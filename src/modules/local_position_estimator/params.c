@@ -15,7 +15,7 @@
 PARAM_DEFINE_FLOAT(LPE_FLW_OFF_Z, 0.0f);
 
 /**
- * Optical flow xy standard deviation.
+ * Optical flow xy velocity standard deviation.
  *
  * @group Local Position Estimator
  * @unit m
@@ -23,10 +23,10 @@ PARAM_DEFINE_FLOAT(LPE_FLW_OFF_Z, 0.0f);
  * @max 1
  * @decimal 3
  */
-PARAM_DEFINE_FLOAT(LPE_FLW_XY, 0.01f);
+PARAM_DEFINE_FLOAT(LPE_FLW_VXY, 0.01f);
 
 /**
- * Optical flow xy standard deviation linear factor on distance
+ * Optical flow xy velocity standard deviation linear factor on distance
  *
  * @group Local Position Estimator
  * @unit m / m
@@ -34,7 +34,7 @@ PARAM_DEFINE_FLOAT(LPE_FLW_XY, 0.01f);
  * @max 1
  * @decimal 3
  */
-PARAM_DEFINE_FLOAT(LPE_FLW_XY_D, 0.01f);
+PARAM_DEFINE_FLOAT(LPE_FLW_VXY_D, 0.01f);
 
 /**
  * Optical flow minimum quality threshold
@@ -225,7 +225,7 @@ PARAM_DEFINE_FLOAT(LPE_EPV_MAX, 5.0f);
  * @max 1
  * @decimal 3
  */
-PARAM_DEFINE_FLOAT(LPE_VIS_XY, 0.5f);
+PARAM_DEFINE_FLOAT(LPE_VIS_XY, 0.1f);
 
 /**
  * Vision z standard deviation.
