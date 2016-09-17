@@ -1,0 +1,51 @@
+#!nsh
+#
+# @name DJI Matrice 100 pincair indoor
+#
+# @type Quadrotor x
+#
+# @output AUX1 feed-through of RC AUX1 channel
+# @output AUX2 feed-through of RC AUX2 channel
+# @output AUX3 feed-through of RC AUX3 channel
+#
+# @maintainer James Goppert <james.goppert@gmail.com>
+#
+
+sh /etc/init.d/4001_quad_x
+
+if [ $AUTOCNF == yes ]
+then
+	param set MC_ROLL_P 5.0
+	param set MC_ROLLRATE_P 0.05
+	param set MC_ROLLRATE_I 0.05
+	param set MC_ROLLRATE_D 0.001
+	param set MC_PITCH_P 5.0
+	param set MC_PITCHRATE_P 0.05
+	param set MC_PITCHRATE_I 0.05
+	param set MC_PITCHRATE_D 0.001
+	param set MC_YAWRATE_P 0.2
+	param set MC_YAWRATE_I 0.0
+	param set MC_YAWRATE_D 0.0
+	param set MC_YAWRATE_MAX 60.0
+	param set MPC_Z_VEL_MAX 1.0
+	param set MPC_Z_VEL_MAX_UP 1.0
+	param set MPC_XY_VEL_MAX 0.5
+	param set MPC_XY_P 0.1
+	param set MPC_XY_VEL_P 0.1
+	param set MPC_THR_HOVER 0.65
+	param set MPC_LAND_SPEED 0.5
+
+	param set BAT_N_CELLS 6
+	param set BAT_V_EMPTY 3.0
+	param set PWM_MIN 1200
+	param set MIS_YAWMODE 0
+	param set MIS_TAKEOFF_ALT 2.0
+	param set SENS_EN_SF0X 1
+	param set SYS_COMPANION 921600
+	param set SYS_MC_EST_GROUP 1
+	param set LPE_GPS_ON 0
+	param set LPE_PN_T 0
+	param set LPE_T_MAX_GRADE 0
+	param set LPE_PUB_AGL_Z 1
+	param set NAV_ACC_RAD 1.0
+fi
