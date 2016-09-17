@@ -57,7 +57,7 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_map_ref(),
 
 	// block parameters
-	_xy_pub_thresh(this, "XY_PUB"),
+	_vxy_pub_thresh(this, "VXY_PUB"),
 	_z_pub_thresh(this, "Z_PUB"),
 	_sonar_z_stddev(this, "SNR_Z"),
 	_sonar_z_offset(this, "SNR_OFF_Z"),
@@ -295,21 +295,20 @@ void BlockLocalPositionEstimator::update()
 	}
 
 	// is xy valid?
-	bool xy_stddev_ok = false;
+	bool vxy_stddev_ok = false;
 
-	if (math::max(_P(X_x, X_x), _P(X_y, X_y)) < _xy_pub_thresh.get()*_xy_pub_thresh.get() ||
-	    math::max(_P(X_x, X_x), _P(X_y, X_y)) < _xy_pub_thresh.get()*_xy_pub_thresh.get()) {
-		xy_stddev_ok = true;
+	if (math::max(_P(X_vx, X_vx), _P(X_vy, X_vy)) < _vxy_pub_thresh.get()*_vxy_pub_thresh.get()) {
+		vxy_stddev_ok = true;
 	}
 
 	if (_validXY) {
 		// if valid and gps has timed out, set to not valid
-		if (!xy_stddev_ok && !_gpsInitialized) {
+		if (!vxy_stddev_ok && !_gpsInitialized) {
 			_validXY = false;
 		}
 
 	} else {
-		if (xy_stddev_ok) {
+		if (vxy_stddev_ok) {
 			_validXY = true;
 		}
 	}

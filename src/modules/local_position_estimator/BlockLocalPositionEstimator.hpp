@@ -244,7 +244,7 @@ private:
 	struct map_projection_reference_s _map_ref;
 
 	// general parameters
-	BlockParamFloat  _xy_pub_thresh;
+	BlockParamFloat  _vxy_pub_thresh;
 	BlockParamFloat  _z_pub_thresh;
 
 	// sonar parameters

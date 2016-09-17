@@ -364,15 +364,15 @@ PARAM_DEFINE_FLOAT(LPE_LON, -86.929);
 PARAM_DEFINE_FLOAT(LPE_X_LP, 5.0f);
 
 /**
- * Required xy standard deviation to publish position
+ * Required velocity xy standard deviation to publish position
  *
  * @group Local Position Estimator
- * @unit m
- * @min 0.3
- * @max 5.0
- * @decimal 1
+ * @unit m/s
+ * @min 0.01
+ * @max 1.0
+ * @decimal 3
  */
-PARAM_DEFINE_FLOAT(LPE_XY_PUB, 1.0f);
+PARAM_DEFINE_FLOAT(LPE_VXY_PUB, 0.1f);
 
 /**
  * Required z standard deviation to publish altitude/ terrain
