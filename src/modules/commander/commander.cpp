@@ -657,6 +657,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 		    orb_advert_t *command_ack_pub, struct vehicle_command_ack_s *command_ack,
 			struct vehicle_roi_s *roi, orb_advert_t *roi_pub)
 {
+	mavlink_and_console_log_info(&mavlink_log_pub, "Entering command handling:%d", cmd->command);
 	/* only handle commands that are meant to be handled by this system and component */
 	if (cmd->target_system != status_local->system_id || ((cmd->target_component != status_local->component_id)
 			&& (cmd->target_component != 0))) { // component_id 0: valid for all components
@@ -684,7 +685,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 
 			} else {
 				cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
-				mavlink_log_critical(&mavlink_log_pub, "Rejecting reposition command");
+				mavlink_and_console_log_info(&mavlink_log_pub, "Rejecting reposition command");
 			}
 		} else {
 			cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
@@ -724,6 +725,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 
 				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_ALTCTL) {
 					/* ALTCTL */
+					mavlink_and_console_log_info(&mavlink_log_pub, "Changing to Alt-Ctl");
 					main_ret = main_state_transition(status_local, commander_state_s::MAIN_STATE_ALTCTL, main_state_prev, &status_flags, &internal_state);
 
 				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_POSCTL) {
@@ -972,6 +974,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 
 				} else {
 					cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
+					mavlink_and_console_log_info(&mavlink_log_pub, "Rejected here.");
 				}
 
 			} else {
@@ -1031,6 +1034,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 
 			if (res == TRANSITION_DENIED) {
 				cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
+				mavlink_and_console_log_info(&mavlink_log_pub, "Rejected here!!");
 
 			} else {
 				cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
@@ -1996,6 +2000,13 @@ int commander_thread_main(int argc, char *argv[])
 		if (updated) {
 			/* position changed */
 			orb_copy(ORB_ID(vehicle_local_position), local_position_sub, &local_position);
+			if (local_position.z_valid){
+				//mavlink_and_console_log_info(&mavlink_log_pub, "Z valid: %.2f", (double)local_position.z);
+			}
+			else {mavlink_and_console_log_info(&mavlink_log_pub, "Z invalid.");}
+		}
+		else{
+			//mavlink_and_console_log_info(&mavlink_log_pub, "Local Position Sub not updated.");
 		}
 
 		/* update attitude estimate */
@@ -3654,7 +3665,7 @@ print_reject_mode(struct vehicle_status_s *status_local, const char *msg)
 
 	if (t - last_print_mode_reject_time > PRINT_MODE_REJECT_INTERVAL) {
 		last_print_mode_reject_time = t;
-		mavlink_log_critical(&mavlink_log_pub, "REJECT %s", msg);
+		mavlink_and_console_log_info(&mavlink_log_pub, "REJECT %s", msg);
 
 		/* only buzz if armed, because else we're driving people nuts indoors
 		they really need to look at the leds as well. */
