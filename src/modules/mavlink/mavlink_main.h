@@ -488,6 +488,8 @@ private:
 	int			_datarate;		///< data rate for normal streams (attitude, position, etc.)
 	int			_datarate_events;	///< data rate for params, waypoints, text messages
 	float			_rate_mult;
+	float			_bandwidth_mult;
+	float 			_hardware_mult;
 	hrt_abstime		_last_hw_rate_timestamp;
 
 	/**

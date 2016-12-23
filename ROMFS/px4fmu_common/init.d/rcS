@@ -494,7 +494,7 @@ then
 			# Exit from nsh to free port for mavlink
 			set EXIT_ON_END yes
 		else
-			set MAVLINK_F "-r 1200"
+			set MAVLINK_F "-d /dev/ttyS1 -b 230400 -m normal -r 19000"
 			# Avoid using ttyS1 for MAVLink on FMUv4
 			if ver hwcmp PX4FMU_V4
 			then
@@ -545,7 +545,7 @@ then
 		fi
 		if param compare SYS_COMPANION 157600
 		then
-			mavlink start -d /dev/ttyS2 -b 57600 -m osd -r 1000
+			mavlink start -d /dev/ttyS2 -b 115200 -m osd -r 1000
 		fi
 		if param compare SYS_COMPANION 257600
 		then
@@ -654,7 +654,8 @@ then
 	fi
 
 	# Start MAVLink
-	mavlink start -r 800000 -d /dev/ttyACM0 -m config -x
+	#mavlink start -r 800000 -d /dev/ttyACM0 -m config -x
+	nshterm /dev/ttyACM0 & 
 
 	#
 	# Logging

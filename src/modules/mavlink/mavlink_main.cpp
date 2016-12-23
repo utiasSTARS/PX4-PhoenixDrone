@@ -201,6 +201,8 @@ Mavlink::Mavlink() :
 	_datarate(1000),
 	_datarate_events(500),
 	_rate_mult(1.0f),
+	_bandwidth_mult(1.0f),
+	_hardware_mult(1.0f),
 	_last_hw_rate_timestamp(0),
 	_mavlink_param_queue_index(0),
 	mavlink_link_termination_allowed(false),
@@ -1628,20 +1630,24 @@ Mavlink::update_rate_mult()
 	/* scale down if we have a TX err rate suggesting link congestion */
 	if (_rate_txerr > 0.0f && !radio_critical) {
 		hardware_mult = (_rate_tx) / (_rate_tx + _rate_txerr);
+		PX4_INFO("TX Err Rate: %.2f", double(_rate_txerr));
 
 	} else if (radio_found && tstatus.telem_time != _last_hw_rate_timestamp) {
 
 		if (tstatus.txbuf < RADIO_BUFFER_CRITICAL_LOW_PERCENTAGE) {
 			/* this indicates link congestion, reduce rate by 20% */
 			hardware_mult *= 0.80f;
+			PX4_INFO("TX Congestion 20");
 
 		} else if (tstatus.txbuf < RADIO_BUFFER_LOW_PERCENTAGE) {
 			/* this indicates link congestion, reduce rate by 2.5% */
 			hardware_mult *= 0.975f;
+			PX4_INFO("TX congestion 2.5");
 
 		} else if (tstatus.txbuf > RADIO_BUFFER_HALF_PERCENTAGE) {
 			/* this indicates spare bandwidth, increase by 2.5% */
 			hardware_mult *= 1.025f;
+			PX4_INFO("Buffer spare");
 			/* limit to a max multiplier of 1 */
 			hardware_mult = fminf(1.0f, hardware_mult);
 		}
@@ -1655,6 +1661,9 @@ Mavlink::update_rate_mult()
 
 	/* pick the minimum from bandwidth mult and hardware mult as limit */
 	_rate_mult = fminf(bandwidth_mult, hardware_mult);
+	_hardware_mult = hardware_mult;
+	_bandwidth_mult = bandwidth_mult;
+	//PX4_INFO("bandwidth: %.2f \t hardware: %.2f", (double)bandwidth_mult, (double)hardware_mult);
 
 	/* ensure the rate multiplier never drops below 5% so that something is always sent */
 	_rate_mult = fmaxf(0.05f, _rate_mult);
@@ -1943,27 +1952,29 @@ Mavlink::task_main(int argc, char *argv[])
 	switch (_mode) {
 	case MAVLINK_MODE_NORMAL:
 		configure_stream("SYS_STATUS", 1.0f);
-		configure_stream("EXTENDED_SYS_STATE", 1.0f);
-		configure_stream("HIGHRES_IMU", 1.5f);
-		configure_stream("ATTITUDE", 20.0f);
+		configure_stream("EXTENDED_SYS_STATE", 10.0f);
+		configure_stream("HIGHRES_IMU", 25.0f);
+		configure_stream("ATTITUDE", 50.0f);
 		configure_stream("RC_CHANNELS", 5.0f);
-		configure_stream("SERVO_OUTPUT_RAW_0", 1.0f);
-		configure_stream("ALTITUDE", 1.0f);
-		configure_stream("GPS_RAW_INT", 1.0f);
+		configure_stream("SERVO_OUTPUT_RAW_0", 10.0f);
+		configure_stream("ALTITUDE", 50.0f);
+		configure_stream("GPS_RAW_INT", 5.0f);
 		configure_stream("ADSB_VEHICLE", 2.0f);
-		configure_stream("DISTANCE_SENSOR", 0.5f);
-		configure_stream("OPTICAL_FLOW_RAD", 1.0f);
-		configure_stream("VISION_POSITION_NED", 1.0f);
-		configure_stream("ESTIMATOR_STATUS", 0.5f);
+		configure_stream("DISTANCE_SENSOR", 25.0f);
+		configure_stream("OPTICAL_FLOW_RAD", 25.0f);
+		//configure_stream("VISION_POSITION_NED", 1.0f);
+		configure_stream("ESTIMATOR_STATUS", 1.0f);
 		configure_stream("NAV_CONTROLLER_OUTPUT", 1.5f);
-		configure_stream("GLOBAL_POSITION_INT", 5.0f);
-		configure_stream("LOCAL_POSITION_NED", 1.0f);
-		configure_stream("POSITION_TARGET_GLOBAL_INT", 1.5f);
-		configure_stream("ATTITUDE_TARGET", 2.0f);
+		configure_stream("GLOBAL_POSITION_INT", 10.0f);
+		configure_stream("LOCAL_POSITION_NED", 25.0f);
+		configure_stream("POSITION_TARGET_GLOBAL_INT", 10.0f);
+		configure_stream("POSITION_TARGET_LOCAL_NED", 25.0f);
+		configure_stream("ATTITUDE_TARGET", 25.0f);
 		configure_stream("HOME_POSITION", 0.5f);
 		configure_stream("NAMED_VALUE_FLOAT", 1.0f);
 		configure_stream("VFR_HUD", 4.0f);
 		configure_stream("WIND_COV", 1.0f);
+		configure_stream("MANUAL_CONTROL", 25.0f);
 		break;
 
 	case MAVLINK_MODE_ONBOARD:
@@ -1999,20 +2010,38 @@ Mavlink::task_main(int argc, char *argv[])
 		break;
 
 	case MAVLINK_MODE_OSD:
-		configure_stream("SYS_STATUS", 5.0f);
-		configure_stream("EXTENDED_SYS_STATE", 1.0f);
+//		configure_stream("SYS_STATUS", 5.0f);
+//		configure_stream("EXTENDED_SYS_STATE", 1.0f);
+//		configure_stream("ATTITUDE", 25.0f);
+//		configure_stream("RC_CHANNELS", 5.0f);
+//		configure_stream("SERVO_OUTPUT_RAW_0", 1.0f);
+//		configure_stream("ALTITUDE", 10.0f);
+//		configure_stream("GPS_RAW_INT", 1.0f);
+//		configure_stream("ESTIMATOR_STATUS", 1.0f);
+//		configure_stream("GLOBAL_POSITION_INT", 10.0f);
+//		configure_stream("LOCAL_POSITION_NED", 30.0f);
+//		configure_stream("POSITION_TARGET_LOCAL_NED", 10.0f);
+//		configure_stream("ATTITUDE_TARGET", 10.0f);
+//		configure_stream("HOME_POSITION", 0.5f);
+//		configure_stream("VFR_HUD", 25.0f);
+//		configure_stream("WIND_COV", 2.0f);
+//		configure_stream("SYSTEM_TIME", 1.0f);
+		configure_stream("SYS_STATUS", 1.0f);
+		//configure_stream("EXTENDED_SYS_STATE", 0.0f);
 		configure_stream("ATTITUDE", 25.0f);
-		configure_stream("RC_CHANNELS", 5.0f);
-		configure_stream("SERVO_OUTPUT_RAW_0", 1.0f);
-		configure_stream("ALTITUDE", 1.0f);
-		configure_stream("GPS_RAW_INT", 1.0f);
-		configure_stream("ESTIMATOR_STATUS", 1.0f);
-		configure_stream("GLOBAL_POSITION_INT", 10.0f);
-		configure_stream("ATTITUDE_TARGET", 10.0f);
-		configure_stream("HOME_POSITION", 0.5f);
-		configure_stream("VFR_HUD", 25.0f);
-		configure_stream("WIND_COV", 2.0f);
-		configure_stream("SYSTEM_TIME", 1.0f);
+		//configure_stream("RC_CHANNELS", 0.0f);
+		//configure_stream("SERVO_OUTPUT_RAW_0", 1.0f);
+		configure_stream("ALTITUDE", 25.0f);
+		//configure_stream("GPS_RAW_INT", 0.0f);
+		//configure_stream("ESTIMATOR_STATUS", 1.0f);
+		//configure_stream("GLOBAL_POSITION_INT", 10.0f);
+		configure_stream("LOCAL_POSITION_NED", 25.0f);
+		//configure_stream("POSITION_TARGET_LOCAL_NED", 10.0f);
+		//configure_stream("ATTITUDE_TARGET", 10.0f);
+		//configure_stream("HOME_POSITION", 0.5f);
+		//configure_stream("VFR_HUD", 25.0f);
+		//configure_stream("WIND_COV", 2.0f);
+		//configure_stream("SYSTEM_TIME", 1.0f);
 		break;
 
 	case MAVLINK_MODE_MAGIC:
@@ -2432,6 +2461,8 @@ Mavlink::display_status()
 			printf("\tremote noise:\t%u\n", _rstatus.remote_noise);
 			printf("\trx errors:\t%u\n", _rstatus.rxerrors);
 			printf("\tfixed:\t\t%u\n", _rstatus.fixed);
+			printf("\tbandwidth multi:\t%.2f", (double)_bandwidth_mult);
+			printf("\thardware multi:\t%.2f", (double)_hardware_mult);
 			break;
 
 		case telemetry_status_s::TELEMETRY_STATUS_RADIO_TYPE_USB:
