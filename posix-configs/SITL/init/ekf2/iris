@@ -3,6 +3,7 @@ param load
 param set MAV_TYPE 2
 param set SYS_AUTOSTART 4010
 param set SYS_RESTART_TYPE 2
+param set SYS_MC_EST_GROUP 2
 dataman start
 param set BAT_N_CELLS 3
 param set CAL_GYRO0_ID 2293768
@@ -73,6 +74,6 @@ mavlink stream -r 50 -s SERVO_OUTPUT_RAW_0 -u 14556
 mavlink stream -r 20 -s RC_CHANNELS -u 14556
 mavlink stream -r 250 -s HIGHRES_IMU -u 14556
 mavlink stream -r 10 -s OPTICAL_FLOW_RAD -u 14556
-sdlog2 start -r 100 -e -t -a
+logger start -e -t
 mavlink boot_complete
 replay trystart

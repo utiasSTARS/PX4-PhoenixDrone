@@ -2,6 +2,14 @@
 #
 # @name Crazyflie 2.0
 #
+# @board px4fmu-v1 exclude
+# @board px4fmu-v2 exclude
+# @board px4fmu-v3 exclude
+# @board px4fmu-v4 exclude
+# @board px4fmu-v4pro exclude
+# @board px4fmu-v5 exclude
+# @board aerofc-v1 exclude
+#
 # @type Quadrotor x
 #
 
@@ -38,4 +46,5 @@ fi
 set PWM_MIN none
 set PWM_MAX none
 set PWM_DISARMED none
-set PWM_RATE 500
+# Will run the motors at 328.125 kHz (recommended)
+set PWM_RATE 3921

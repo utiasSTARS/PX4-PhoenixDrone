@@ -69,7 +69,7 @@
 
 #ifdef DEBUG
 # include <debug.h>
-# define debug(fmt, args...)	lowsyslog(fmt "\n", ##args)
+# define debug(fmt, args...)	syslog(LOG_DEBUG,fmt "\n", ##args)
 #else
 # define debug(fmt, args...)	do {} while(0)
 #endif
@@ -90,6 +90,7 @@ extern uint16_t			r_page_rc_input_config[]; /* PX4IO_PAGE_RC_INPUT_CONFIG */
 extern uint16_t			r_page_servo_failsafe[]; /* PX4IO_PAGE_FAILSAFE_PWM */
 extern uint16_t			r_page_servo_control_min[]; /* PX4IO_PAGE_CONTROL_MIN_PWM */
 extern uint16_t			r_page_servo_control_max[]; /* PX4IO_PAGE_CONTROL_MAX_PWM */
+extern int16_t			r_page_servo_control_trim[]; /* PX4IO_PAGE_CONTROL_TRIM_PWM */
 extern uint16_t			r_page_servo_disarmed[];	/* PX4IO_PAGE_DISARMED_PWM */
 
 /*
@@ -126,6 +127,7 @@ extern uint16_t			r_page_servo_disarmed[];	/* PX4IO_PAGE_DISARMED_PWM */
 #define r_setup_scale_pitch	r_page_setup[PX4IO_P_SETUP_SCALE_PITCH]
 #define r_setup_scale_yaw	r_page_setup[PX4IO_P_SETUP_SCALE_YAW]
 #define r_setup_sbus_rate	r_page_setup[PX4IO_P_SETUP_SBUS_RATE]
+#define r_setup_thr_fac		r_page_setup[PX4IO_P_SETUP_THR_MDL_FAC]
 #define r_setup_slew_max	r_page_setup[PX4IO_P_SETUP_MOTOR_SLEW_MAX]
 
 #define r_control_values	(&r_page_controls[0])
@@ -147,6 +149,7 @@ struct sys_state_s {
 
 extern struct sys_state_s system_state;
 extern float dt;
+extern bool update_mc_thrust_param;
 
 /*
  * PWM limit structure

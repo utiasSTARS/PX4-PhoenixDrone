@@ -71,12 +71,14 @@ set(config_module_list
 	lib/runway_takeoff
 	lib/tailsitter_recovery
 	lib/terrain_estimation
+	lib/version
 
 	examples/px4_simple_app
 	examples/mc_att_control_multiplatform
 	examples/mc_pos_control_multiplatform
 	examples/ekf_att_pos_estimator
 	examples/attitude_estimator_ekf
+	examples/fixedwing_control
 
 	#
 	# Testing

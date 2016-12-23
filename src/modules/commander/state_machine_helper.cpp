@@ -80,6 +80,14 @@ using namespace DriverFramework;
 #define AVIONICS_WARN_VOLTAGE	4.9f
 #endif
 
+static const char reason_no_rc[] = "no RC";
+static const char reason_no_offboard[] = "no offboard";
+static const char reason_no_rc_and_no_offboard[] = "no RC and no offboard";
+static const char reason_no_gps[] = "no gps";
+static const char reason_no_gps_cmd[] = "no gps cmd";
+static const char reason_no_home[] = "no home";
+static const char reason_no_datalink[] = "no datalink";
+
 // This array defines the arming state transitions. The rows are the new state, and the columns
 // are the current state. Using new state and current state you can index into the array which
 // will be true for a valid transition or false for a invalid transition. In some cases even
@@ -119,7 +127,8 @@ transition_result_t arming_state_transition(struct vehicle_status_s *status,
 		orb_advert_t *mavlink_log_pub,	///< uORB handle for mavlink log
 		status_flags_s *status_flags,
 		float avionics_power_rail_voltage,
-		bool can_arm_without_gps)
+		bool can_arm_without_gps,
+		hrt_abstime time_since_boot)
 {
 	// Double check that our static arrays are still valid
 	ASSERT(vehicle_status_s::ARMING_STATE_INIT == 0);
@@ -145,7 +154,7 @@ transition_result_t arming_state_transition(struct vehicle_status_s *status,
 		    && status->hil_state == vehicle_status_s::HIL_STATE_OFF) {
 
 			prearm_ret = preflight_check(status, mavlink_log_pub, true /* pre-arm */, false /* force_report */,
-						     status_flags, battery, can_arm_without_gps);
+						     status_flags, battery, can_arm_without_gps, time_since_boot);
 		}
 
 		/* re-run the pre-flight check as long as sensors are failing */
@@ -156,7 +165,7 @@ transition_result_t arming_state_transition(struct vehicle_status_s *status,
 
 			if (last_preflight_check == 0 || hrt_absolute_time() - last_preflight_check > 1000 * 1000) {
 				prearm_ret = preflight_check(status, mavlink_log_pub, false /* pre-flight */, false /* force_report */,
-							     status_flags, battery, can_arm_without_gps);
+							     status_flags, battery, can_arm_without_gps, time_since_boot);
 				status_flags->condition_system_sensors_initialized = !prearm_ret;
 				last_preflight_check = hrt_absolute_time();
 				last_prearm_ret = prearm_ret;
@@ -627,9 +636,22 @@ transition_result_t hil_state_transition(hil_state_t new_state, orb_advert_t sta
 }
 
 /**
+ * Enable failsafe and repot to user
+ */
+void enable_failsafe(struct vehicle_status_s *status,
+		bool old_failsafe,
+		orb_advert_t *mavlink_log_pub, const char * reason) {
+	if (old_failsafe == false) {
+		mavlink_and_console_log_info(mavlink_log_pub, reason);
+	}
+	status->failsafe = true;
+}
+
+/**
  * Check failsafe and main status and set navigation status for navigator accordingly
  */
 bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *internal_state,
+		   orb_advert_t *mavlink_log_pub,
 		   const bool data_link_loss_enabled, const bool mission_finished,
 		   const bool stay_in_failsafe, status_flags_s *status_flags, bool landed,
 		   const bool rc_loss_enabled, const int offb_loss_act, const int offb_loss_rc_act)
@@ -638,6 +660,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 	bool armed = (status->arming_state == vehicle_status_s::ARMING_STATE_ARMED
 		      || status->arming_state == vehicle_status_s::ARMING_STATE_ARMED_ERROR);
+	bool old_failsafe = status->failsafe;
 	status->failsafe = false;
 
 	/* evaluate main state to decide in normal (non-failsafe) mode */
@@ -650,7 +673,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		/* require RC for all manual modes */
 		if (rc_loss_enabled && (status->rc_signal_lost || status_flags->rc_signal_lost_cmd) && armed) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_rc);
 
 			if (status_flags->condition_global_position_valid && status_flags->condition_home_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RCRECOVER;
@@ -699,7 +722,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			const bool rc_lost = rc_loss_enabled && (status->rc_signal_lost || status_flags->rc_signal_lost_cmd);
 
 			if (rc_lost && armed) {
-				status->failsafe = true;
+				enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_rc);
 
 				if (status_flags->condition_global_position_valid &&
 				    status_flags->condition_home_position_valid &&
@@ -725,7 +748,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			} else if (((status->is_rotary_wing && !status_flags->condition_local_position_valid) ||
 				    (!status->is_rotary_wing && !status_flags->condition_global_position_valid))
 				   && armed) {
-				status->failsafe = true;
+				enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_rc);
 
 				if (status_flags->condition_local_altitude_valid) {
 					status->nav_state = vehicle_status_s::NAVIGATION_STATE_ALTCTL;
@@ -757,7 +780,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		} else if (status_flags->gps_failure_cmd) {
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_DESCEND;
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps_cmd);
 
 		} else if (status_flags->rc_signal_lost_cmd) {
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RCRECOVER;
@@ -769,7 +792,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		} else if (status_flags->gps_failure) {
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_DESCEND;
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps);
 
 		} else if (status->engine_failure) {
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LANDENGFAIL;
@@ -784,7 +807,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			 * check for datalink lost: this should always trigger RTGS */
 
 		} else if (data_link_loss_enabled && status->data_link_lost) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_datalink);
 
 			if (status_flags->condition_global_position_valid && status_flags->condition_home_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RTGS;
@@ -804,7 +827,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			 * or all links are lost after the mission finishes in air: this should always trigger RCRECOVER */
 
 		} else if (!data_link_loss_enabled && status->rc_signal_lost && status->data_link_lost && !landed && mission_finished) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_datalink);
 
 			if (status_flags->condition_global_position_valid && status_flags->condition_home_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RCRECOVER;
@@ -835,12 +858,12 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		} else if (status_flags->gps_failure) {
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_DESCEND;
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps);
 
 			/* also go into failsafe if just datalink is lost */
 
 		} else if (status->data_link_lost && data_link_loss_enabled) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_datalink);
 
 			if (status_flags->condition_global_position_valid && status_flags->condition_home_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RTGS;
@@ -858,9 +881,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			/* go into failsafe if RC is lost and datalink loss is not set up and rc loss is not disabled */
 
 		} else if (status->rc_signal_lost && rc_loss_enabled && !data_link_loss_enabled) {
-
-			status->failsafe = true;
-
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_rc);
 			if (status_flags->condition_global_position_valid && status_flags->condition_home_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RTGS;
 
@@ -897,11 +918,11 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		} else if (status_flags->gps_failure) {
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_DESCEND;
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps);
 
 		} else if ((!status_flags->condition_global_position_valid ||
 			    !status_flags->condition_home_position_valid)) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_home);
 
 			if (status_flags->condition_local_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LAND;
@@ -927,7 +948,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LANDENGFAIL;
 
 		} else if (!status_flags->condition_global_position_valid) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps);
 
 			if (status_flags->condition_local_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LAND;
@@ -954,7 +975,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		} else if (status_flags->gps_failure || (!status_flags->condition_global_position_valid ||
 				!status_flags->condition_home_position_valid)) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps);
 
 			if (status_flags->condition_local_position_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LAND;
@@ -981,7 +1002,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		} else if (status_flags->gps_failure || (!status_flags->condition_global_position_valid ||
 				!status_flags->condition_home_position_valid)) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_gps);
 
 			if (status_flags->condition_local_altitude_valid) {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_DESCEND;
@@ -1000,7 +1021,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 
 		/* require offboard control, otherwise stay where you are */
 		if (status_flags->offboard_control_signal_lost && !status->rc_signal_lost) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_offboard);
 
 			if (status_flags->offboard_control_loss_timeout && offb_loss_rc_act < 5 && offb_loss_rc_act >= 0) {
 				if (offb_loss_rc_act == 3 && status_flags->condition_global_position_valid
@@ -1039,7 +1060,7 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 			}
 
 		} else if (status_flags->offboard_control_signal_lost && status->rc_signal_lost) {
-			status->failsafe = true;
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_rc_and_no_offboard);
 
 			if (status_flags->offboard_control_loss_timeout && offb_loss_act < 3 && offb_loss_act >= 0) {
 				if (offb_loss_act == 2 && status_flags->condition_global_position_valid
@@ -1083,10 +1104,8 @@ bool set_nav_state(struct vehicle_status_s *status, struct commander_state_s *in
 }
 
 int preflight_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_pub, bool prearm, bool force_report,
-		    status_flags_s *status_flags, battery_status_s *battery, bool can_arm_without_gps)
+		    status_flags_s *status_flags, battery_status_s *battery, bool can_arm_without_gps, hrt_abstime time_since_boot)
 {
-	/*
-	 */
 	bool reportFailures = force_report || (!status_flags->condition_system_prearm_error_reported &&
 					       status_flags->condition_system_hotplug_timeout);
 
@@ -1100,7 +1119,7 @@ int preflight_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_p
 
 	bool preflight_ok = Commander::preflightCheck(mavlink_log_pub, true, true, true, true,
 			    checkAirspeed, (status->rc_input_mode == vehicle_status_s::RC_IN_MODE_DEFAULT),
-			    !can_arm_without_gps, true, status->is_vtol, reportFailures);
+			    !can_arm_without_gps, true, status->is_vtol, reportFailures, prearm, time_since_boot);
 
 	if (!status_flags->circuit_breaker_engaged_usb_check && status_flags->usb_connected && prearm) {
 		preflight_ok = false;

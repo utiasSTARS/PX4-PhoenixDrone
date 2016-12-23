@@ -83,6 +83,7 @@ const struct {
 	{"sensors",		test_sensors,	0},
 	{"time",		test_time,	OPT_NOJIGTEST},
 	{"uart_baudchange",	test_uart_baudchange,	OPT_NOJIGTEST},
+	{"uart_break",		test_uart_break,	OPT_NOJIGTEST | OPT_NOALLTEST},
 #else
 	{"rc",			rc_tests_main,	0},
 #endif /* __PX4_NUTTX */
@@ -101,6 +102,7 @@ const struct {
 	{"autodeclination",	test_autodeclination,	0},
 	{"bson",		test_bson,	0},
 	{"conv",		test_conv, 0},
+	//{"dataman",		test_dataman, 0}, // Enable for by hand testing
 	{"file",		test_file,	OPT_NOJIGTEST | OPT_NOALLTEST},
 	{"file2",		test_file2,	OPT_NOJIGTEST},
 	{"float",		test_float,	0},

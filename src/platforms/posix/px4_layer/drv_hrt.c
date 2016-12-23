@@ -94,7 +94,6 @@ static void hrt_unlock(void)
 }
 
 #if defined(__PX4_APPLE_LEGACY)
-#include <time.h>
 #include <sys/time.h>
 
 int px4_clock_gettime(clockid_t clk_id, struct timespec *tp)
@@ -118,7 +117,7 @@ int px4_clock_settime(clockid_t clk_id, struct timespec *tp)
 	return 0;
 }
 
-#elif defined(__QURT)
+#elif defined(__PX4_QURT)
 
 #include "dspal_time.h"
 

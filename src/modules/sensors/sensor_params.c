@@ -2489,6 +2489,34 @@ PARAM_DEFINE_INT32(RC_MAP_OFFB_SW, 0);
 PARAM_DEFINE_INT32(RC_MAP_KILL_SW, 0);
 
 /**
+ * Arm switch channel
+ *
+ * @min 0
+ * @max 18
+ * @group Radio Switches
+ * @value 0 Unassigned
+ * @value 1 Channel 1
+ * @value 2 Channel 2
+ * @value 3 Channel 3
+ * @value 4 Channel 4
+ * @value 5 Channel 5
+ * @value 6 Channel 6
+ * @value 7 Channel 7
+ * @value 8 Channel 8
+ * @value 9 Channel 9
+ * @value 10 Channel 10
+ * @value 11 Channel 11
+ * @value 12 Channel 12
+ * @value 13 Channel 13
+ * @value 14 Channel 14
+ * @value 15 Channel 15
+ * @value 16 Channel 16
+ * @value 17 Channel 17
+ * @value 18 Channel 18
+ */
+PARAM_DEFINE_INT32(RC_MAP_ARM_SW, 0);
+
+/**
  * Flaps channel
  *
  * @min 0
@@ -2544,6 +2572,33 @@ PARAM_DEFINE_INT32(RC_MAP_FLAPS, 0);
  */
 PARAM_DEFINE_INT32(RC_MAP_TRANS_SW, 0);
 
+/**
+ * Landing gear switch channel
+ *
+ * @min 0
+ * @max 18
+ * @group Radio Switches
+ * @value 0 Unassigned
+ * @value 1 Channel 1
+ * @value 2 Channel 2
+ * @value 3 Channel 3
+ * @value 4 Channel 4
+ * @value 5 Channel 5
+ * @value 6 Channel 6
+ * @value 7 Channel 7
+ * @value 8 Channel 8
+ * @value 9 Channel 9
+ * @value 10 Channel 10
+ * @value 11 Channel 11
+ * @value 12 Channel 12
+ * @value 13 Channel 13
+ * @value 14 Channel 14
+ * @value 15 Channel 15
+ * @value 16 Channel 16
+ * @value 17 Channel 17
+ * @value 18 Channel 18
+ */
+PARAM_DEFINE_INT32(RC_MAP_GEAR_SW, 0);
 /**
  * AUX1 Passthrough RC Channel
  *
@@ -2959,6 +3014,24 @@ PARAM_DEFINE_FLOAT(RC_OFFB_TH, 0.5f);
 PARAM_DEFINE_FLOAT(RC_KILLSWITCH_TH, 0.25f);
 
 /**
+ * Threshold for the arm switch
+ *
+ * 0-1 indicate where in the full channel range the threshold sits
+ * 		0 : min
+ * 		1 : max
+ * sign indicates polarity of comparison
+ * 		positive : true when channel>th
+ * 		negative : true when channel<th
+ *
+ * @min -1
+ * @max 1
+ * @group Radio Switches
+ *
+ *
+ */
+PARAM_DEFINE_FLOAT(RC_ARMSWITCH_TH, 0.25f);
+
+/**
  * Threshold for the VTOL transition switch
  *
  * 0-1 indicate where in the full channel range the threshold sits
@@ -2975,6 +3048,24 @@ PARAM_DEFINE_FLOAT(RC_KILLSWITCH_TH, 0.25f);
  *
  */
 PARAM_DEFINE_FLOAT(RC_TRANS_TH, 0.25f);
+
+/**
+ * Threshold for the landing gear switch
+ *
+ * 0-1 indicate where in the full channel range the threshold sits
+ * 		0 : min
+ * 		1 : max
+ * sign indicates polarity of comparison
+ * 		positive : true when channel>th
+ * 		negative : true when channel<th
+ *
+ * @min -1
+ * @max 1
+ * @group Radio Switches
+ *
+ *
+ */
+PARAM_DEFINE_FLOAT(RC_GEAR_TH, 0.25f);
 
 /**
  * PWM input channel that provides RSSI.
@@ -3045,12 +3136,18 @@ PARAM_DEFINE_INT32(RC_RSSI_PWM_MIN, 2000);
 PARAM_DEFINE_INT32(SENS_EN_LL40LS, 0);
 
 /**
- * Lightware SF0x laser rangefinder
+ * Lightware laser rangefinder (serial)
  *
  * @reboot_required true
- *
- * @boolean
+ * @min 0
+ * @max 4
  * @group Sensor Enable
+ * @value 0 Disabled
+ * @value 1 SF02
+ * @value 2 SF10/a
+ * @value 3 SF10/b
+ * @value 4 SF10/c
+ * @value 5 SF11/c
  */
 PARAM_DEFINE_INT32(SENS_EN_SF0X, 0);
 
@@ -3075,7 +3172,7 @@ PARAM_DEFINE_INT32(SENS_EN_MB12XX, 0);
 PARAM_DEFINE_INT32(SENS_EN_TRONE, 0);
 
 /**
- * Lightware SF1xx laser rangefinder
+ * Lightware SF1xx laser rangefinder (i2c)
  *
  * @reboot_required true
  * @min 0
@@ -3088,6 +3185,33 @@ PARAM_DEFINE_INT32(SENS_EN_TRONE, 0);
  * @value 4 SF11/c
  */
 PARAM_DEFINE_INT32(SENS_EN_SF1XX, 0);
+
+/**
+ * Thermal control of sensor temperature
+ *
+ * @value -1 Thermal control unavailable
+ * @value 0 Thermal control off
+ * @group Sensor Enable
+ */
+PARAM_DEFINE_INT32(SENS_EN_THERMAL, -1);
+
+/**
+ * Set the PWM output frequency for the MAIN outputs
+ *
+ * IMPORTANT: CHANGING THIS PARAMETER REQUIRES A COMPLETE SYSTEM
+ * REBOOT IN ORDER TO APPLY THE CHANGES. COMPLETELY POWER-CYCLE
+ * THE SYSTEM TO PUT CHANGES INTO EFFECT.
+ *
+ * Set to 400 for industry default or 1000 for high frequency ESCs.
+ *
+ * @reboot_required true
+ *
+ * @min -1
+ * @max 2000
+ * @unit Hz
+ * @group PWM Outputs
+ */
+PARAM_DEFINE_INT32(PWM_RATE, 400);
 
 /**
  * Set the minimum PWM for the MAIN outputs
@@ -3142,7 +3266,7 @@ PARAM_DEFINE_INT32(PWM_MAX, 2000);
  * @unit us
  * @group PWM Outputs
  */
-PARAM_DEFINE_INT32(PWM_DISARMED, 0);
+PARAM_DEFINE_INT32(PWM_DISARMED, 900);
 
 /**
  * Set the minimum PWM for the MAIN outputs
@@ -3197,7 +3321,19 @@ PARAM_DEFINE_INT32(PWM_AUX_MAX, 2000);
  * @unit us
  * @group PWM Outputs
  */
-PARAM_DEFINE_INT32(PWM_AUX_DISARMED, 1000);
+PARAM_DEFINE_INT32(PWM_AUX_DISARMED, 1500);
+
+/**
+ * Thrust to PWM model parameter
+ *
+ * Parameter used to model the relationship between static thrust and motor
+ * input PWM. Model is: thrust = (1-factor)*PWM + factor * PWM^2
+ *
+ * @min 0.0
+ * @max 1.0
+ * @group PWM Outputs
+ */
+PARAM_DEFINE_FLOAT(THR_MDL_FAC, 0.0f);
 
 /**
  * Minimum motor rise time (slew rate limit).

@@ -25,8 +25,8 @@ void BlockLocalPositionEstimator::lidarInit()
 					     "mean %d cm stddev %d cm",
 					     int(100 * _lidarStats.getMean()(0)),
 					     int(100 * _lidarStats.getStdDev()(0)));
-		_lidarInitialized = true;
-		_lidarFault = FAULT_NONE;
+		_sensorTimeout &= ~SENSOR_LIDAR;
+		_sensorFault &= ~SENSOR_LIDAR;
 	}
 }
 
@@ -53,8 +53,8 @@ int BlockLocalPositionEstimator::lidarMeasure(Vector<float, n_y_lidar> &y)
 	_time_last_lidar = _timeStamp;
 	y.setZero();
 	y(0) = (d + _lidar_z_offset.get()) *
-	       cosf(_sub_att.get().roll) *
-	       cosf(_sub_att.get().pitch);
+	       cosf(_eul(0)) *
+	       cosf(_eul(1));
 	return OK;
 }
 
@@ -64,6 +64,11 @@ void BlockLocalPositionEstimator::lidarCorrect()
 	Vector<float, n_y_lidar> y;
 
 	if (lidarMeasure(y) != OK) { return; }
+
+	// account for leaning
+	y(0) = y(0) *
+	       cosf(_eul(0)) *
+	       cosf(_eul(1));
 
 	// measurement matrix
 	Matrix<float, n_y_lidar, n_x> C;
@@ -95,34 +100,31 @@ void BlockLocalPositionEstimator::lidarCorrect()
 	float beta = (r.transpose() * (S_I * r))(0, 0);
 
 	if (beta > BETA_TABLE[n_y_lidar]) {
-		if (_lidarFault < FAULT_MINOR) {
-			_lidarFault = FAULT_MINOR;
+		if (!(_sensorFault & SENSOR_LIDAR)) {
 			mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar fault,  beta %5.2f", double(beta));
+			_sensorFault |= SENSOR_LIDAR;
 		}
 
 		// abort correction
 		return;
 
-	} else if (_lidarFault) { // disable fault if ok
-		_lidarFault = FAULT_NONE;
-		//mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar OK");
+	} else if (_sensorFault & SENSOR_LIDAR) {
+		_sensorFault &= ~SENSOR_LIDAR;
+		mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar OK");
 	}
 
-	// kalman filter correction if no fault
-	if (_lidarFault < fault_lvl_disable) {
-		Matrix<float, n_x, n_y_lidar> K = _P * C.transpose() * S_I;
-		Vector<float, n_x> dx = K * r;
-		correctionLogic(dx);
-		_x += dx;
-		_P -= K * C * _P;
-	}
+	// kalman filter correction always
+	Matrix<float, n_x, n_y_lidar> K = _P * C.transpose() * S_I;
+	Vector<float, n_x> dx = K * r;
+	_x += dx;
+	_P -= K * C * _P;
 }
 
 void BlockLocalPositionEstimator::lidarCheckTimeout()
 {
 	if (_timeStamp - _time_last_lidar > LIDAR_TIMEOUT) {
-		if (_lidarInitialized) {
-			_lidarInitialized = false;
+		if (!(_sensorTimeout & SENSOR_LIDAR)) {
+			_sensorTimeout |= SENSOR_LIDAR;
 			_lidarStats.reset();
 			mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] lidar timeout ");
 		}

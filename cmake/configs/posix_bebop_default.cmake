@@ -3,9 +3,9 @@ include(posix/px4_impl_posix)
 set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-linux-gnueabihf-raspbian.cmake)
 
 add_definitions(
-  -D__PX4_POSIX_BEBOP
-  -D__LINUX
-  -D__BEBOP
+	-D__PX4_POSIX_BEBOP
+	-D__DF_LINUX # Define needed DriverFramework
+	-D__DF_BEBOP # Define needed DriverFramework
 	)
 
 set(CMAKE_PROGRAM_PATH
@@ -72,6 +72,7 @@ set(config_module_list
 	#
 	# PX4 drivers
 	#
+	drivers/gps
 
 	#
 	# Libraries
@@ -88,6 +89,7 @@ set(config_module_list
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/version
 	lib/DriverFramework/framework
 
 	#

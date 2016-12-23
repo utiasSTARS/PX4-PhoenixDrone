@@ -48,8 +48,8 @@ __BEGIN_DECLS
 #define MAX_IO_TIMERS			4
 #define MAX_TIMER_IO_CHANNELS	8
 
-#define MAX_LED_TIMERS			1
-#define MAX_TIMER_LED_CHANNELS	3
+#define MAX_LED_TIMERS			2
+#define MAX_TIMER_LED_CHANNELS	6
 
 #define IO_TIMER_ALL_MODES_CHANNELS 0
 
@@ -106,6 +106,9 @@ __EXPORT int io_timer_handler3(int irq, void *context);
 
 __EXPORT int io_timer_channel_init(unsigned channel, io_timer_channel_mode_t mode,
 				   channel_handler_t channel_handler, void *context);
+
+__EXPORT int io_timer_init_timer(unsigned timer);
+
 __EXPORT int io_timer_set_rate(unsigned timer, unsigned rate);
 __EXPORT int io_timer_set_enable(bool state, io_timer_channel_mode_t mode,
 				 io_timer_channel_allocation_t masks);

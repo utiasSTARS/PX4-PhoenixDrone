@@ -1,7 +1,7 @@
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 px4_posix_generate_builtin_commands(
-	OUT apps.h
+	OUT apps
 	MODULE_LIST ${module_libraries})
 
 if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
@@ -19,7 +19,7 @@ if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 		SOURCES
 			px4muorb_stub.c
 			${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
-			apps.h
+			apps.cpp
 		LINK_LIBS
 			-Wl,--start-group
 			${module_libraries}
@@ -41,7 +41,7 @@ elseif ("${BOARD}" STREQUAL "rpi")
 
 	px4_add_executable(px4
 		${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
-		apps.h
+		apps.cpp
 		)
 
 	target_link_libraries(px4
@@ -53,11 +53,13 @@ elseif ("${BOARD}" STREQUAL "rpi")
 		-Wl,--end-group
 		)
 
+	file(GLOB RPI_CONFIG_FILES ${PX4_SOURCE_DIR}/posix-configs/rpi/*.config)
 	px4_add_scp_push(OUT upload
 			 OS ${OS}
 			 BOARD ${BOARD}
 			 FILES ${CMAKE_CURRENT_BINARY_DIR}/px4
-				 ${PX4_SOURCE_DIR}/posix-configs/rpi/px4.config
+				${RPI_CONFIG_FILES}
+				${PX4_SOURCE_DIR}/ROMFS
 			 DEPENDS px4
 			 DEST /home/pi)
 
@@ -68,7 +70,7 @@ elseif ("${BOARD}" STREQUAL "bebop")
 
 	px4_add_executable(px4
 		${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
-		apps.h
+		apps.cpp
 		)
 
 	if (NOT APPLE)
@@ -98,7 +100,7 @@ else()
 
 	px4_add_executable(px4
 		${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
-		apps.h
+		apps.cpp
 		)
 
 	if (NOT APPLE)

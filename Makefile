@@ -88,12 +88,20 @@ FIRST_ARG := $(firstword $(MAKECMDGOALS))
 ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 j ?= 4
 
+NINJA_BIN := ninja
 ifndef NO_NINJA_BUILD
-NINJA_BUILD := $(shell ninja --version 2>/dev/null)
+NINJA_BUILD := $(shell $(NINJA_BIN) --version 2>/dev/null)
+
+ifndef NINJA_BUILD
+NINJA_BIN := ninja-build
+NINJA_BUILD := $(shell $(NINJA_BIN) --version 2>/dev/null)
 endif
+
+endif
+
 ifdef NINJA_BUILD
     PX4_CMAKE_GENERATOR ?= "Ninja"
-    PX4_MAKE = ninja
+    PX4_MAKE = $(NINJA_BIN)
     PX4_MAKE_ARGS =
 else
 
@@ -147,7 +155,7 @@ define colorecho
 endef
 
 # Get a list of all config targets.
-ALL_CONFIG_TARGETS := $(basename $(shell find "$(SRC_DIR)/cmake/configs" -name '*.cmake' -print | sed  -e 's:^.*/::' | sort))
+ALL_CONFIG_TARGETS := $(basename $(shell find "$(SRC_DIR)/cmake/configs" ! -name '*_common*' ! -name '*_sdflight_*' -name '*.cmake' -print | sed  -e 's:^.*/::' | sort))
 # Strip off leading nuttx_
 NUTTX_CONFIG_TARGETS := $(patsubst nuttx_%,%,$(filter nuttx_%,$(ALL_CONFIG_TARGETS)))
 
@@ -195,11 +203,11 @@ run_sitl_ros: _sitl_deprecation
 # Other targets
 # --------------------------------------------------------------------
 
-.PHONY: uavcan_firmware check check_format format unittest tests qgc_firmware package_firmware clean submodulesclean distclean
+.PHONY: uavcan_firmware compiler_version check check_format format unittest tests qgc_firmware package_firmware clean submodulesclean distclean
 .NOTPARALLEL:
 
 # All targets with just dependencies but no recipe must either be marked as phony (or have the special @: as recipe).
-.PHONY: checks_defaults checks_bootloaders checks_tests checks_alts checks_uavcan checks_sitls checks_last quick_check check_px4fmu-v4_default tests extra_firmware
+.PHONY: checks_defaults checks_bootloaders checks_tests checks_alts checks_uavcan checks_sitls checks_last quick_check tests extra_firmware
 
 uavcan_firmware:
 ifeq ($(VECTORCONTROL),1)
@@ -208,30 +216,67 @@ ifeq ($(VECTORCONTROL),1)
 endif
 
 check_px4fmu-v4_default: uavcan_firmware
+
 check_px4fmu-v4_default_and_uavcan: check_px4fmu-v4_default
-	@echo
+	@echo VECTORCONTROL=$VECTORCONTROL
 ifeq ($(VECTORCONTROL),1)
 	@echo "Cleaning up vectorcontrol firmware"
 	@rm -rf vectorcontrol
 	@rm -rf ROMFS/px4fmu_common/uavcan
 endif
 
-# All default targets that don't require a special build environment (currently built on semaphore-ci)
-check: 	check_px4fmu-v1_default \
-	check_px4fmu-v2_default \
-	check_px4fmu-v2_test \
-	check_px4fmu-v4_default_and_uavcan \
-	check_mindpx-v2_default \
-	check_posix_sitl_default \
-	check_tap-v1_default \
-	check_asc-v1_default \
-	check_px4-stm32f4discovery_default \
-	check_crazyflie_default \
-	check_tests \
-	check_format
+sizes:
+	@-find build_* -name firmware_nuttx -type f | xargs size 2> /dev/null || :
 
+
+checks_defaults: \
+	check_auav-x21_default \
+	check_px4fmu-v5_default \
+	check_px4nucleoF767ZI-v1_default \
+	check_px4fmu-v1_default \
+	check_px4fmu-v2_default \
+	check_px4fmu-v3_default \
+	check_px4fmu-v4_default \
+	check_px4fmu-v4pro_default \
+	check_mindpx-v2_default \
+	check_px4cannode-v1_default \
+	check_px4esc-v1_default \
+	check_s2740vc-v1_default \
+	check_tap-v1_default \
+	check_crazyflie_default \
+
+checks_bootloaders: \
+	check_px4cannode-v1_bootloader \
+	check_esc35-v1_bootloader \
+	check_px4esc-v1_bootloader \
+	check_px4flow-v2_bootloader \
+	check_s2740vc-v1_bootloader \
+	check_zubaxgnss-v1_bootloader \
+
+checks_tests: \
+	check_px4fmu-v2_test
+
+checks_alts: \
+	check_aerofc-v1_default \
+	check_px4-stm32f4discovery_default \
+
+checks_uavcan: \
+	check_px4fmu-v4_default_and_uavcan
+
+checks_sitls: \
+	check_posix_sitl_default
+
+checks_last: \
+	tests \
+	check_format \
+
+compiler_version:
+	-arm-none-eabi-gcc --version
+
+# All default targets that don't require a special build environment (currently built on semaphore-ci)
+check: compiler_version checks_defaults checks_tests checks_alts checks_uavcan checks_bootloaders checks_last sizes
 # quick_check builds a single nuttx and posix target, runs testing, and checks the style
-quick_check: check_posix_sitl_default check_px4fmu-v4_default check_tests check_format
+quick_check: compiler_version check_posix_sitl_default check_px4fmu-v4_default tests check_format sizes
 
 check_format:
 	$(call colorecho,"Checking formatting with astyle")
@@ -246,6 +291,11 @@ check_%:
 	@echo
 	$(call colorecho,"Building" $(subst check_,,$@))
 	@$(MAKE) --no-print-directory $(subst check_,,$@)
+	@mkdir -p Binaries
+	@mkdir -p Meta/$(subst check_,,$@)
+	@cp build_$(subst check_,,$@)/*.xml Meta/$(subst check_,,$@) 2> /dev/null || :
+	@find build_$(subst check_,,$@)/src/firmware -type f -name 'nuttx-*-default.px4' -exec cp "{}" Binaries \; 2> /dev/null || :
+	@rm -rf build_$(subst check_,,$@)
 	@echo
 
 unittest: posix_sitl_default
@@ -255,19 +305,28 @@ unittest: posix_sitl_default
 run_tests_posix: posix_sitl_default
 	@(cd build_posix_sitl_default/ && ctest -V)
 
-tests: check_unittest run_tests_posix
+tests: unittest run_tests_posix
+
+tests_coverage:
+	@(PX4_CODE_COVERAGE=1 CCACHE_DISABLE=1 ${MAKE} tests)
+	@(lcov --directory . --capture --quiet --output-file coverage.info)
+	@(lcov --remove coverage.info '/usr/*' --quiet --output-file coverage.info)
+	#@(lcov --list coverage.info)
+	@(genhtml coverage.info --quiet --output-directory coverage-html)
 
 # QGroundControl flashable firmware (currently built by travis-ci)
 qgc_firmware: \
 	check_px4fmu-v1_default \
 	check_px4fmu-v2_default \
+	check_px4fmu-v3_default \
+	check_px4fmu-v4_default_and_uavcan \
+	check_crazyflie_default \
 	check_mindpx-v2_default \
 	check_tap-v1_default \
-	check_px4fmu-v4_default_and_uavcan \
 	check_format
 
 package_firmware:
-	@zip --junk-paths Firmware.zip `find . -name \*.px4`
+	@zip --junk-paths Firmware.zip `find Binaries/. -name \*.px4`
 
 clean:
 	@rm -rf build_*/
@@ -279,7 +338,7 @@ submodulesclean:
 	@git submodule update --init --recursive --force
 
 distclean: submodulesclean clean
-	@git clean -ff -x -d -e ".project" -e ".cproject"
+	@git clean -ff -x -d -e ".project" -e ".cproject" -e ".idea"
 
 # All other targets are handled by PX4_MAKE. Add a rule here to avoid printing an error.
 %:
@@ -313,4 +372,3 @@ help:
 # Print a list of all config targets.
 list_config_targets:
 	@for targ in $(patsubst nuttx_%,[nuttx_]%,$(ALL_CONFIG_TARGETS)); do echo $$targ; done
-

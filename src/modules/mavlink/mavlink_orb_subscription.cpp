@@ -39,22 +39,24 @@
  * @author Lorenz Meier <lorenz@px4.io>
  */
 
+#include "mavlink_orb_subscription.h"
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <uORB/uORB.h>
 #include <stdio.h>
 
-#include "mavlink_orb_subscription.h"
+#include <px4_defines.h>
+#include <uORB/uORB.h>
 
 MavlinkOrbSubscription::MavlinkOrbSubscription(const orb_id_t topic, int instance) :
 	next(nullptr),
 	_topic(topic),
-	_instance(instance),
 	_fd(-1),
+	_instance(instance),
 	_published(false),
-	_last_pub_check(0),
-	_subscribe_from_beginning(false)
+	_subscribe_from_beginning(false),
+	_last_pub_check(0)
 {
 }
 
@@ -193,6 +195,14 @@ MavlinkOrbSubscription::is_published()
 
 	if (updated) {
 		_published = true;
+	}
+
+	// topic may have been last published before we subscribed
+	uint64_t time_topic = 0;
+	if (!_published && orb_stat(_fd, &time_topic) == PX4_OK) {
+		if (time_topic != 0) {
+			_published = true;
+		}
 	}
 
 	return _published;

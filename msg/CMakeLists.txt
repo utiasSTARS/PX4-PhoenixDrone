@@ -91,6 +91,7 @@ set(msg_file_names
 	sensor_combined.msg
 	sensor_gyro.msg
 	sensor_mag.msg
+	sensor_preflight.msg
 	servorail_status.msg
 	subsystem_info.msg
 	system_power.msg
@@ -101,6 +102,8 @@ set(msg_file_names
 	transponder_report.msg
 	uavcan_parameter_request.msg
 	uavcan_parameter_value.msg
+	ulog_stream.msg
+	ulog_stream_ack.msg
 	vehicle_attitude.msg
 	vehicle_attitude_setpoint.msg
 	vehicle_command_ack.msg
@@ -119,6 +122,9 @@ set(msg_file_names
 	vtol_vehicle_status.msg
 	wind_estimate.msg
 	vehicle_roi.msg
+	mount_orientation.msg
+	collision_report.msg
+	low_stack.msg
 	)
 
 # Get absolute paths

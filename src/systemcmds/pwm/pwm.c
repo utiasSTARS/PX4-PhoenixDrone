@@ -46,13 +46,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <sys/mount.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
-#include <nuttx/i2c.h>
-#include <nuttx/mtd.h>
-#include <nuttx/fs/nxffs.h>
 #include <nuttx/fs/ioctl.h>
 
 #include <arch/board/board.h>
@@ -90,6 +86,7 @@ usage(const char *reason)
 	     "disarmed ...\t\t\tDisarmed PWM\n"
 	     "min ...\t\t\t\tMinimum PWM\n"
 	     "max ...\t\t\t\tMaximum PWM\n"
+//	     "trim ...\t\t\tTrim PWM\n"
 	     "\t[-c <channels>]\t\t(e.g. 1234)\n"
 	     "\t[-m <channel mask> ]\t(e.g. 0xF)\n"
 	     "\t[-a]\t\t\tConfigure all outputs\n"
@@ -112,6 +109,46 @@ usage(const char *reason)
 
 }
 
+static unsigned
+get_parameter_value(const char *option, const char *paramDescription)
+{
+	unsigned result_value = 0;
+
+	/* check if this is a param name */
+	if (strncmp("p:", option, 2) == 0) {
+
+		char paramName[32];
+		strncpy(paramName, option + 2, 17);
+		/* user wants to use a param name */
+		param_t parm = param_find(paramName);
+
+		if (parm != PARAM_INVALID) {
+			int32_t pwm_parm;
+			int gret = param_get(parm, &pwm_parm);
+
+			if (gret == 0) {
+				result_value = pwm_parm;
+
+			} else {
+				errx(gret, "PARAM '%s' LOAD FAIL", paramDescription);
+			}
+
+		} else {
+			errx(1, "PARAM '%s' NAME NOT FOUND", paramName);
+		}
+
+	} else {
+		char *ep;
+		result_value = strtoul(option, &ep, 0);
+
+		if (*ep != '\0') {
+			errx(1, "BAD '%s'", paramDescription);
+		}
+	}
+
+	return result_value;
+}
+
 int
 pwm_main(int argc, char *argv[])
 {
@@ -127,7 +164,7 @@ pwm_main(int argc, char *argv[])
 	unsigned group;
 	unsigned long channels;
 	unsigned single_ch = 0;
-	unsigned pwm_value = 0;
+	int pwm_value = 0;
 
 	if (argc < 2) {
 		usage(NULL);
@@ -190,48 +227,12 @@ pwm_main(int argc, char *argv[])
 
 			break;
 
-		case 'p': {
-				/* check if this is a param name */
-				if (strncmp("p:", optarg, 2) == 0) {
-
-					char buf[32];
-					strncpy(buf, optarg + 2, 16);
-					/* user wants to use a param name */
-					param_t parm = param_find(buf);
-
-					if (parm != PARAM_INVALID) {
-						int32_t pwm_parm;
-						int gret = param_get(parm, &pwm_parm);
-
-						if (gret == 0) {
-							pwm_value = pwm_parm;
-
-						} else {
-							usage("PARAM LOAD FAIL");
-						}
-
-					} else {
-						usage("PARAM NAME NOT FOUND");
-					}
-
-				} else {
-
-					pwm_value = strtoul(optarg, &ep, 0);
-				}
-
-				if (*ep != '\0') {
-					usage("BAD PWM VAL");
-				}
-			}
-
+		case 'p':
+			pwm_value = get_parameter_value(optarg, "PWM Value");
 			break;
 
 		case 'r':
-			alt_rate = strtoul(optarg, &ep, 0);
-
-			if (*ep != '\0') {
-				usage("BAD rate VAL");
-			}
+			alt_rate = get_parameter_value(optarg, "PWM Rate");
 
 			break;
 
@@ -764,6 +765,8 @@ pwm_main(int argc, char *argv[])
 
 		struct pwm_output_values max_pwm;
 
+		struct pwm_output_values trim_pwm;
+
 		ret = ioctl(fd, PWM_SERVO_GET_FAILSAFE_PWM, (unsigned long)&failsafe_pwm);
 
 		if (ret != OK) {
@@ -788,6 +791,12 @@ pwm_main(int argc, char *argv[])
 			err(1, "PWM_SERVO_GET_MAX_PWM");
 		}
 
+		ret = ioctl(fd, PWM_SERVO_GET_TRIM_PWM, (unsigned long)&trim_pwm);
+
+		if (ret != OK) {
+			err(1, "PWM_SERVO_GET_TRIM_PWM");
+		}
+
 		/* print current servo values */
 		for (unsigned i = 0; i < servo_count; i++) {
 			servo_position_t spos;
@@ -805,8 +814,9 @@ pwm_main(int argc, char *argv[])
 				}
 
 
-				printf(" failsafe: %d, disarmed: %d us, min: %d us, max: %d us)",
-				       failsafe_pwm.values[i], disarmed_pwm.values[i], min_pwm.values[i], max_pwm.values[i]);
+				printf(" failsafe: %d, disarmed: %d us, min: %d us, max: %d us, trim: %5.2f)",
+				       failsafe_pwm.values[i], disarmed_pwm.values[i], min_pwm.values[i], max_pwm.values[i],
+				       (double)((int16_t)(trim_pwm.values[i]) / 10000.0f));
 				printf("\n");
 
 			} else {
@@ -888,4 +898,3 @@ pwm_main(int argc, char *argv[])
 	usage(NULL);
 	return 0;
 }
-

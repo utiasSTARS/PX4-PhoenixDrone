@@ -111,11 +111,11 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/commander_state.h>
 #include <uORB/topics/cpuload.h>
+#include <uORB/topics/low_stack.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
 #include <systemlib/perf_counter.h>
-#include <systemlib/git_version.h>
 #include <systemlib/printload.h>
 #include <systemlib/mavlink_log.h>
 #include <version/version.h>
@@ -872,8 +872,8 @@ int write_version(int fd)
 	};
 
 	/* fill version message and write it */
-	strncpy(log_msg_VER.body.fw_git, px4_git_version, sizeof(log_msg_VER.body.fw_git));
-	strncpy(log_msg_VER.body.arch, HW_ARCH, sizeof(log_msg_VER.body.arch));
+	strncpy(log_msg_VER.body.fw_git, px4_firmware_version_string(), sizeof(log_msg_VER.body.fw_git));
+	strncpy(log_msg_VER.body.arch, px4_board_name(), sizeof(log_msg_VER.body.arch));
 	return write(fd, &log_msg_VER, sizeof(log_msg_VER));
 }
 
@@ -1222,6 +1222,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct vehicle_land_detected_s land_detected;
 		struct cpuload_s cpuload;
 		struct vehicle_gps_position_s dual_gps_pos;
+		struct low_stack_s low_stack;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1283,6 +1284,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_LAND_s log_LAND;
 			struct log_RPL6_s log_RPL6;
 			struct log_LOAD_s log_LOAD;
+			struct log_DPRS_s log_DPRS;
+			struct log_STCK_s log_STCK;
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1332,6 +1335,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int land_detected_sub;
 		int commander_state_sub;
 		int cpuload_sub;
+		int diff_pres_sub;
+		int low_stack_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1374,6 +1379,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.land_detected_sub = -1;
 	subs.commander_state_sub = -1;
 	subs.cpuload_sub = -1;
+	subs.diff_pres_sub = -1;
+	subs.low_stack_sub = -1;
 
 	/* add new topics HERE */
 
@@ -1723,8 +1730,6 @@ int sdlog2_thread_main(int argc, char *argv[])
 					log_msg.body.log_SENS.baro_pres = 0;
 					log_msg.body.log_SENS.baro_alt = buf.sensor.baro_alt_meter;
 					log_msg.body.log_SENS.baro_temp = buf.sensor.baro_temp_celcius;
-					log_msg.body.log_SENS.diff_pres = 0;
-					log_msg.body.log_SENS.diff_pres_filtered = 0;
 					LOGBUFFER_WRITE_AND_COUNT(SENS);
 				}
 			}
@@ -1956,6 +1961,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 				log_msg.body.log_BATT.current_filtered = buf.battery.current_filtered_a;
 				log_msg.body.log_BATT.discharged = buf.battery.discharged_mah;
 				log_msg.body.log_BATT.remaining = buf.battery.remaining;
+				log_msg.body.log_BATT.scale = buf.battery.scale;
 				log_msg.body.log_BATT.warning = buf.battery.warning;
 				LOGBUFFER_WRITE_AND_COUNT(BATT);
 			}
@@ -2038,10 +2044,23 @@ int sdlog2_thread_main(int argc, char *argv[])
 			/* --- AIRSPEED --- */
 			if (copy_if_updated(ORB_ID(airspeed), &subs.airspeed_sub, &buf.airspeed)) {
 				log_msg.msg_type = LOG_AIRS_MSG;
-				log_msg.body.log_AIRS.indicated_airspeed = buf.airspeed.indicated_airspeed_m_s;
-				log_msg.body.log_AIRS.true_airspeed = buf.airspeed.true_airspeed_m_s;
+				log_msg.body.log_AIRS.indicated_airspeed_m_s = buf.airspeed.indicated_airspeed_m_s;
+				log_msg.body.log_AIRS.true_airspeed_m_s = buf.airspeed.true_airspeed_m_s;
+				log_msg.body.log_AIRS.true_airspeed_unfiltered_m_s = buf.airspeed.true_airspeed_unfiltered_m_s;
 				log_msg.body.log_AIRS.air_temperature_celsius = buf.airspeed.air_temperature_celsius;
+				log_msg.body.log_AIRS.confidence = buf.airspeed.confidence;
 				LOGBUFFER_WRITE_AND_COUNT(AIRS);
+			}
+
+			/* --- DIFFERENTIAL PRESSURE --- */
+			if (copy_if_updated(ORB_ID(differential_pressure), &subs.diff_pres_sub, &buf.diff_pres)) {
+				log_msg.msg_type = LOG_DPRS_MSG;
+				log_msg.body.log_DPRS.error_count = buf.diff_pres.error_count;
+				log_msg.body.log_DPRS.differential_pressure_raw_pa = buf.diff_pres.differential_pressure_raw_pa;
+				log_msg.body.log_DPRS.differential_pressure_filtered_pa = buf.diff_pres.differential_pressure_filtered_pa;
+				log_msg.body.log_DPRS.max_differential_pressure_pa = buf.diff_pres.max_differential_pressure_pa;
+				log_msg.body.log_DPRS.temperature = buf.diff_pres.temperature;
+				LOGBUFFER_WRITE_AND_COUNT(DPRS);
 			}
 
 			/* --- ESCs --- */
@@ -2154,6 +2173,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 				log_msg.body.log_EST2.gps_check_fail_flags = buf.estimator_status.gps_check_fail_flags;
 				log_msg.body.log_EST2.control_mode_flags = buf.estimator_status.control_mode_flags;
 				log_msg.body.log_EST2.health_flags = buf.estimator_status.health_flags;
+				log_msg.body.log_EST2.innov_test_flags = buf.estimator_status.innovation_check_flags;
 				LOGBUFFER_WRITE_AND_COUNT(EST2);
 
 				log_msg.msg_type = LOG_EST3_MSG;
@@ -2171,6 +2191,9 @@ int sdlog2_thread_main(int argc, char *argv[])
 					log_msg.body.log_INO1.s[i] = buf.innovations.vel_pos_innov[i];
 					log_msg.body.log_INO1.s[i + 6] = buf.innovations.vel_pos_innov_var[i];
 				}
+				for (unsigned i = 0; i < 3; i++) {
+					log_msg.body.log_INO1.s[i + 12] = buf.innovations.output_tracking_error[i];
+				}
 				LOGBUFFER_WRITE_AND_COUNT(EST4);
 
 				log_msg.msg_type = LOG_EST5_MSG;
@@ -2184,6 +2207,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 				log_msg.body.log_INO2.s[7] = buf.innovations.heading_innov_var;
 				log_msg.body.log_INO2.s[8] = buf.innovations.airspeed_innov;
 				log_msg.body.log_INO2.s[9] = buf.innovations.airspeed_innov_var;
+				log_msg.body.log_INO2.s[10] = buf.innovations.beta_innov;
+				log_msg.body.log_INO2.s[11] = buf.innovations.beta_innov_var;
 				LOGBUFFER_WRITE_AND_COUNT(EST5);
 
 				log_msg.msg_type = LOG_EST6_MSG;
@@ -2261,19 +2286,20 @@ int sdlog2_thread_main(int argc, char *argv[])
 		/* --- ATTITUDE --- */
 		if (copy_if_updated(ORB_ID(vehicle_attitude), &subs.att_sub, &buf.att)) {
 			log_msg.msg_type = LOG_ATT_MSG;
-			log_msg.body.log_ATT.q_w = buf.att.q[0];
-			log_msg.body.log_ATT.q_x = buf.att.q[1];
-			log_msg.body.log_ATT.q_y = buf.att.q[2];
-			log_msg.body.log_ATT.q_z = buf.att.q[3];
-			log_msg.body.log_ATT.roll = buf.att.roll;
-			log_msg.body.log_ATT.pitch = buf.att.pitch;
-			log_msg.body.log_ATT.yaw = buf.att.yaw;
+			float q0 = buf.att.q[0];
+			float q1 = buf.att.q[1];
+			float q2 = buf.att.q[2];
+			float q3 = buf.att.q[3];
+			log_msg.body.log_ATT.q_w = q0;
+			log_msg.body.log_ATT.q_x = q1;
+			log_msg.body.log_ATT.q_y = q2;
+			log_msg.body.log_ATT.q_z = q3;
+			log_msg.body.log_ATT.roll = atan2f(2*(q0*q1 + q2*q3), 1 - 2*(q1*q1 + q2*q2));
+			log_msg.body.log_ATT.pitch = asinf(2*(q0*q2 - q3*q1));
+			log_msg.body.log_ATT.yaw = atan2f(2*(q0*q3 + q1*q2), 1 - 2*(q2*q2 + q3*q3));
 			log_msg.body.log_ATT.roll_rate = buf.att.rollspeed;
 			log_msg.body.log_ATT.pitch_rate = buf.att.pitchspeed;
 			log_msg.body.log_ATT.yaw_rate = buf.att.yawspeed;
-			log_msg.body.log_ATT.gx = buf.att.g_comp[0];
-			log_msg.body.log_ATT.gy = buf.att.g_comp[1];
-			log_msg.body.log_ATT.gz = buf.att.g_comp[2];
 			LOGBUFFER_WRITE_AND_COUNT(ATT);
 		}
 
@@ -2297,7 +2323,14 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.msg_type = LOG_LOAD_MSG;
 			log_msg.body.log_LOAD.cpu_load = buf.cpuload.load;
 			LOGBUFFER_WRITE_AND_COUNT(LOAD);
+		}
 
+		/* --- STACK --- */
+		if (copy_if_updated(ORB_ID(low_stack), &subs.low_stack_sub, &buf.low_stack)) {
+			log_msg.msg_type = LOG_STCK_MSG;
+			log_msg.body.log_STCK.stack_free = buf.low_stack.stack_free;
+			strncpy(log_msg.body.log_STCK.task_name, (char*)buf.low_stack.task_name, sizeof(log_msg.body.log_STCK.task_name));
+			LOGBUFFER_WRITE_AND_COUNT(STCK);
 		}
 
 		pthread_mutex_lock(&logbuffer_mutex);

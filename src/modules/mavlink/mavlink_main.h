@@ -70,6 +70,7 @@
 #include "mavlink_ftp.h"
 #include "mavlink_log_handler.h"
 #include "mavlink_shell.h"
+#include "mavlink_ulog.h"
 
 enum Protocol {
 	SERIAL = 0,
@@ -162,7 +163,8 @@ public:
 		MAVLINK_MODE_ONBOARD,
 		MAVLINK_MODE_OSD,
 		MAVLINK_MODE_MAGIC,
-		MAVLINK_MODE_CONFIG
+		MAVLINK_MODE_CONFIG,
+		MAVLINK_MODE_IRIDIUM
 	};
 
 	enum BROADCAST_MODE {
@@ -170,11 +172,10 @@ public:
 		BROADCAST_MODE_ON
 	};
 
-	static const char *mavlink_mode_str(enum MAVLINK_MODE mode)
-	{
+	static const char *mavlink_mode_str(enum MAVLINK_MODE mode) {
 		switch (mode) {
 		case MAVLINK_MODE_NORMAL:
-			return "Normal";
+				return "Normal";
 
 		case MAVLINK_MODE_CUSTOM:
 			return "Custom";
@@ -190,6 +191,9 @@ public:
 
 		case MAVLINK_MODE_CONFIG:
 			return "Config";
+
+		case MAVLINK_MODE_IRIDIUM:
+			return "Iridium";
 
 		default:
 			return "Unknown";
@@ -233,14 +237,6 @@ public:
 	static int		start_helper(int argc, char *argv[]);
 
 	/**
-	 * Handle parameter related messages.
-	 */
-	void			mavlink_pm_message_handler(const mavlink_channel_t chan, const mavlink_message_t *msg);
-
-	void			get_mavlink_mode_and_state(struct vehicle_status_s *status, struct position_setpoint_triplet_s *pos_sp_triplet,
-			uint8_t *mavlink_state, uint8_t *mavlink_base_mode, uint32_t *mavlink_custom_mode);
-
-	/**
 	 * Enable / disable Hardware in the Loop simulation mode.
 	 *
 	 * @param hil_enabled	The new HIL enable/disable state.
@@ -272,6 +268,12 @@ public:
 	 */
 	bool			get_manual_input_mode_generation() { return _generate_rc; }
 
+
+	/**
+	 * This is the beginning of a MAVLINK_START_UART_SEND/MAVLINK_END_UART_SEND transaction
+	 */
+	void 			begin_send();
+
 	/**
 	 * Send bytes out on the link.
 	 *
@@ -284,7 +286,7 @@ public:
 	 *
 	 * @return the number of bytes sent or -1 in case of error
 	 */
-	int			send_packet();
+	int             send_packet();
 
 	/**
 	 * Resend message as is, don't change sequence number and CRC.
@@ -435,6 +437,17 @@ public:
 	/** close the Mavlink shell if it is open */
 	void			close_shell();
 
+	/** get ulog streaming if active, nullptr otherwise */
+	MavlinkULog		*get_ulog_streaming() { return _mavlink_ulog; }
+	void			try_start_ulog_streaming(uint8_t target_system, uint8_t target_component) {
+		if (_mavlink_ulog) { return; }
+
+		_mavlink_ulog = MavlinkULog::try_start(_datarate, 0.7f, target_system, target_component);
+	}
+	void			request_stop_ulog_streaming() {
+		if (_mavlink_ulog) { _mavlink_ulog_stop_requested = true; }
+	}
+
 protected:
 	Mavlink			*next;
 
@@ -467,6 +480,8 @@ private:
 	MavlinkFTP			*_mavlink_ftp;
 	MavlinkLogHandler		*_mavlink_log_handler;
 	MavlinkShell			*_mavlink_shell;
+	MavlinkULog			*_mavlink_ulog;
+	volatile bool			_mavlink_ulog_stop_requested;
 
 	MAVLINK_MODE 		_mode;
 

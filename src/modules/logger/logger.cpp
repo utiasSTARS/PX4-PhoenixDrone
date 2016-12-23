@@ -47,6 +47,8 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_gps_position.h>
+#include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_command_ack.h>
 
 #include <drivers/drv_hrt.h>
 #include <px4_includes.h>
@@ -55,6 +57,8 @@
 #include <px4_sem.h>
 #include <systemlib/mavlink_log.h>
 #include <replay/definitions.hpp>
+#include <version/version.h>
+#include <systemlib/mcu_version.h>
 
 #ifdef __PX4_DARWIN
 #include <sys/param.h>
@@ -83,7 +87,6 @@ using namespace px4::logger;
 
 static Logger *logger_ptr = nullptr;
 static int logger_task = -1;
-static pthread_t writer_thread;
 
 /* This is used to schedule work for the logger (periodic scan for updated topics) */
 static void timer_callback(void *arg)
@@ -185,12 +188,14 @@ void Logger::usage(const char *reason)
 		PX4_WARN("%s\n", reason);
 	}
 
-	PX4_INFO("usage: logger {start|stop|on|off|status} [-r <log rate>] [-b <buffer size>] -e -a -t -x\n"
+	PX4_INFO("usage: logger {start|stop|on|off|status} [-r <log rate>] [-b <buffer size>] -e -a -t -x -m <mode> -q <size>\n"
 		 "\t-r\tLog rate in Hz, 0 means unlimited rate\n"
 		 "\t-b\tLog buffer size in KiB, default is 12\n"
 		 "\t-e\tEnable logging right after start until disarm (otherwise only when armed)\n"
 		 "\t-f\tLog until shutdown (implies -e)\n"
-		 "\t-t\tUse date/time for naming log directories and files");
+		 "\t-t\tUse date/time for naming log directories and files\n"
+		 "\t-m\tMode: one of 'file', 'mavlink', 'all' (default=all)\n"
+		 "\t-q\tuORB queue size for mavlink mode");
 }
 
 int Logger::start(char *const *argv)
@@ -201,7 +206,7 @@ int Logger::start(char *const *argv)
 	logger_task = px4_task_spawn_cmd("logger",
 					 SCHED_DEFAULT,
 					 SCHED_PRIORITY_MAX - 5,
-					 3200,
+					 3600,
 					 (px4_main_t)&Logger::run_trampoline,
 					 (char *const *)argv);
 
@@ -216,28 +221,33 @@ int Logger::start(char *const *argv)
 
 void Logger::status()
 {
-	if (!_enabled) {
-		PX4_INFO("Running, but not logging");
+	PX4_INFO("Running in mode: %s", configured_backend_mode());
 
-	} else {
-		PX4_INFO("Running");
+	if (_writer.is_started(LogWriter::BackendFile)) {
+		PX4_INFO("File Logging Running");
 		print_statistics();
 	}
+
+	if (_writer.is_started(LogWriter::BackendMavlink)) {
+		PX4_INFO("Mavlink Logging Running");
+	}
 }
+
 void Logger::print_statistics()
 {
-	if (!_enabled) {
+	if (!_writer.is_started(LogWriter::BackendFile)) { //currently only statistics for file logging
 		return;
 	}
 
-	float kibibytes = _writer.get_total_written() / 1024.0f;
+	/* this is only for the file backend */
+	float kibibytes = _writer.get_total_written_file() / 1024.0f;
 	float mebibytes = kibibytes / 1024.0f;
-	float seconds = ((float)(hrt_absolute_time() - _start_time)) / 1000000.0f;
+	float seconds = ((float)(hrt_absolute_time() - _start_time_file)) / 1000000.0f;
 
 	PX4_INFO("Log file: %s/%s", _log_dir, _log_file_name);
 	PX4_INFO("Wrote %4.2f MiB (avg %5.2f KiB/s)", (double)mebibytes, (double)(kibibytes / seconds));
 	PX4_INFO("Since last status: dropouts: %zu (max len: %.3f s), max used buffer: %zu / %zu B",
-		 _write_dropouts, (double)_max_dropout_duration, _high_water, _writer.get_buffer_size());
+		 _write_dropouts, (double)_max_dropout_duration, _high_water, _writer.get_buffer_size_file());
 	_high_water = 0;
 	_write_dropouts = 0;
 	_max_dropout_duration = 0.f;
@@ -251,12 +261,15 @@ void Logger::run_trampoline(int argc, char *argv[])
 	bool log_until_shutdown = false;
 	bool error_flag = false;
 	bool log_name_timestamp = false;
+	unsigned int queue_size = 14; //TODO: we might be able to reduce this if mavlink polled on the topic and/or
+	// topic sizes get reduced
+	LogWriter::Backend backend = LogWriter::BackendAll;
 
 	int myoptind = 1;
 	int ch;
 	const char *myoptarg = NULL;
 
-	while ((ch = px4_getopt(argc, argv, "r:b:etf", &myoptind, &myoptarg)) != EOF) {
+	while ((ch = px4_getopt(argc, argv, "r:b:etfm:q:", &myoptind, &myoptarg)) != EOF) {
 		switch (ch) {
 		case 'r': {
 				unsigned long r = strtoul(myoptarg, NULL, 10);
@@ -293,6 +306,32 @@ void Logger::run_trampoline(int argc, char *argv[])
 			log_until_shutdown = true;
 			break;
 
+		case 'm':
+			if (!strcmp(myoptarg, "file")) {
+				backend = LogWriter::BackendFile;
+
+			} else if (!strcmp(myoptarg, "mavlink")) {
+				backend = LogWriter::BackendMavlink;
+
+			} else if (!strcmp(myoptarg, "all")) {
+				backend = LogWriter::BackendAll;
+
+			} else {
+				PX4_ERR("unknown mode: %s", myoptarg);
+				error_flag = true;
+			}
+
+			break;
+
+		case 'q':
+			queue_size = strtoul(myoptarg, NULL, 10);
+
+			if (queue_size == 0) {
+				queue_size = 1;
+			}
+
+			break;
+
 		case '?':
 			error_flag = true;
 			break;
@@ -309,8 +348,8 @@ void Logger::run_trampoline(int argc, char *argv[])
 		return;
 	}
 
-	logger_ptr = new Logger(log_buffer_size, log_interval, log_on_start,
-				log_until_shutdown, log_name_timestamp);
+	logger_ptr = new Logger(backend, log_buffer_size, log_interval, log_on_start,
+				log_until_shutdown, log_name_timestamp, queue_size);
 
 #if defined(DBGPRINT) && defined(__PX4_NUTTX)
 	struct mallinfo alloc_info = mallinfo();
@@ -336,13 +375,13 @@ void Logger::run_trampoline(int argc, char *argv[])
 }
 
 
-Logger::Logger(size_t buffer_size, uint32_t log_interval, bool log_on_start,
-	       bool log_until_shutdown, bool log_name_timestamp) :
+Logger::Logger(LogWriter::Backend backend, size_t buffer_size, uint32_t log_interval, bool log_on_start,
+	       bool log_until_shutdown, bool log_name_timestamp, unsigned int queue_size) :
 	_arm_override(false),
 	_log_on_start(log_on_start),
 	_log_until_shutdown(log_until_shutdown),
 	_log_name_timestamp(log_name_timestamp),
-	_writer(buffer_size),
+	_writer(backend, buffer_size, queue_size),
 	_log_interval(log_interval)
 {
 	_log_utc_offset = param_find("SDLOG_UTC_OFFSET");
@@ -427,16 +466,12 @@ int Logger::add_topic(const char *name, unsigned interval = 0)
 	return fd;
 }
 
-bool Logger::copy_if_updated_multi(LoggerSubscription &sub, int multi_instance, void *buffer)
+bool Logger::copy_if_updated_multi(LoggerSubscription &sub, int multi_instance, void *buffer, bool try_to_subscribe)
 {
 	bool updated = false;
 	int &handle = sub.fd[multi_instance];
 
-	// only try to subscribe to topic if this is the first time
-	// after that just check after a certain interval to avoid high cpu usage
-	if (handle < 0 && (sub.time_tried_subscribe == 0 ||
-			   hrt_elapsed_time(&sub.time_tried_subscribe) > TRY_SUBSCRIBE_INTERVAL)) {
-		sub.time_tried_subscribe = hrt_absolute_time();
+	if (handle < 0 && try_to_subscribe) {
 
 		if (OK == orb_exists(sub.metadata, multi_instance)) {
 			handle = orb_subscribe_multi(sub.metadata, multi_instance);
@@ -477,16 +512,20 @@ void Logger::add_default_topics()
 {
 #ifdef CONFIG_ARCH_BOARD_SITL
 	add_topic("vehicle_attitude_groundtruth", 10);
+	add_topic("vehicle_global_position_groundtruth", 100);
+	add_topic("vehicle_local_position_groundtruth", 100);
 #endif
+
+	// Note: try to avoid setting the interval where possible, as it increases RAM usage
 
 	add_topic("vehicle_attitude", 10);
 	add_topic("actuator_outputs", 50);
-	add_topic("telemetry_status", 50);
+	add_topic("telemetry_status");
 	add_topic("vehicle_command");
-	add_topic("vehicle_status", 200);
+	add_topic("vehicle_status");
 	add_topic("vtol_vehicle_status", 100);
 	add_topic("commander_state", 100);
-	add_topic("satellite_info", 1000);
+	add_topic("satellite_info");
 	add_topic("vehicle_attitude_setpoint", 20);
 	add_topic("vehicle_rates_setpoint", 10);
 	add_topic("actuator_controls", 20);
@@ -505,6 +544,7 @@ void Logger::add_default_topics()
 	add_topic("rc_channels");
 	add_topic("input_rc");
 	add_topic("airspeed", 50);
+	add_topic("differential_pressure", 50);
 	add_topic("distance_sensor", 20);
 	add_topic("esc_status", 20);
 	add_topic("estimator_status", 50); //this one is large
@@ -515,6 +555,8 @@ void Logger::add_default_topics()
 	add_topic("camera_trigger");
 	add_topic("cpuload");
 	add_topic("gps_dump"); //this will only be published if GPS_DUMP_COMM is set
+	add_topic("sensor_preflight");
+	add_topic("low_stack");
 
 	/* for estimator replay (need to be at full rate) */
 	add_topic("sensor_combined");
@@ -568,31 +610,50 @@ int Logger::add_topics_from_file(const char *fname)
 	return ntopics;
 }
 
+const char *Logger::configured_backend_mode() const
+{
+	switch (_writer.backend()) {
+	case LogWriter::BackendFile: return "file";
+
+	case LogWriter::BackendMavlink: return "mavlink";
+
+	case LogWriter::BackendAll: return "all";
+
+	default: return "several";
+	}
+}
+
 void Logger::run()
 {
 #ifdef DBGPRINT
 	struct mallinfo alloc_info = {};
 #endif /* DBGPRINT */
 
-	PX4_INFO("logger started");
+	PX4_INFO("logger started (mode=%s)", configured_backend_mode());
 
-	int mkdir_ret = mkdir(LOG_ROOT, S_IRWXU | S_IRWXG | S_IRWXO);
+	if (_writer.backend() & LogWriter::BackendFile) {
+		int mkdir_ret = mkdir(LOG_ROOT, S_IRWXU | S_IRWXG | S_IRWXO);
 
-	if (mkdir_ret == 0) {
-		PX4_INFO("log root dir created: %s", LOG_ROOT);
+		if (mkdir_ret == 0) {
+			PX4_INFO("log root dir created: %s", LOG_ROOT);
 
-	} else if (errno != EEXIST) {
-		PX4_ERR("failed creating log root dir: %s", LOG_ROOT);
-		return;
+		} else if (errno != EEXIST) {
+			PX4_ERR("failed creating log root dir: %s", LOG_ROOT);
+
+			if ((_writer.backend() & ~LogWriter::BackendFile) == 0) {
+				return;
+			}
+		}
+
+		if (check_free_space() == 1) {
+			return;
+		}
 	}
 
-	if (check_free_space() == 1) {
-		return;
-	}
-
-	uORB::Subscription<vehicle_status_s> vehicle_status_sub(ORB_ID(vehicle_status));
+	int vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	uORB::Subscription<parameter_update_s> parameter_update_sub(ORB_ID(parameter_update));
-	uORB::Subscription<log_message_s> log_message_sub(ORB_ID(log_message), 20);
+	int log_message_sub = orb_subscribe(ORB_ID(log_message));
+	orb_set_interval(log_message_sub, 20);
 
 	int ntopics = add_topics_from_file(PX4_ROOTFSDIR "/fs/microsd/etc/logging/logger_topics.txt");
 
@@ -603,8 +664,15 @@ void Logger::run()
 		add_default_topics();
 	}
 
+	int vehicle_command_sub = -1;
+	orb_advert_t vehicle_command_ack_pub = nullptr;
+
+	if (_writer.backend() & LogWriter::BackendMavlink) {
+		vehicle_command_sub = orb_subscribe(ORB_ID(vehicle_command));
+	}
+
 	//all topics added. Get required message buffer size
-	int max_msg_size = 0;
+	int max_msg_size = 0, ret;
 
 	for (const auto &subscription : _subscriptions) {
 		//use o_size, because that's what orb_copy will use
@@ -635,14 +703,7 @@ void Logger::run()
 
 
 	if (!_writer.init()) {
-		PX4_ERR("init of writer failed (alloc failed)");
-		return;
-	}
-
-	int ret = _writer.thread_start(writer_thread);
-
-	if (ret) {
-		PX4_ERR("failed to create writer thread (%i)", ret);
+		PX4_ERR("writer init failed");
 		return;
 	}
 
@@ -656,7 +717,7 @@ void Logger::run()
 	// we start logging immediately
 	// the case where we wait with logging until vehicle is armed is handled below
 	if (_log_on_start) {
-		start_log();
+		start_log_file();
 	}
 
 	/* init the update timer */
@@ -664,23 +725,36 @@ void Logger::run()
 	memset(&timer_call, 0, sizeof(hrt_call));
 	px4_sem_t timer_semaphore;
 	px4_sem_init(&timer_semaphore, 0, 0);
+
+	/* timer_semaphore use case is a signal */
+
+	px4_sem_setprotocol(&timer_semaphore, SEM_PRIO_NONE);
+
+
 	hrt_call_every(&timer_call, _log_interval, _log_interval, timer_callback, &timer_semaphore);
 
+	// check for new subscription data
+	hrt_abstime next_subscribe_check = 0;
+	int next_subscribe_topic_index = -1; // this is used to distribute the checks over time
 
 	while (!_task_should_exit) {
 
 		// Start/stop logging when system arm/disarm
-		if (vehicle_status_sub.check_updated()) {
-			vehicle_status_sub.update();
-			bool armed = (vehicle_status_sub.get().arming_state == vehicle_status_s::ARMING_STATE_ARMED) ||
-				     (vehicle_status_sub.get().arming_state == vehicle_status_s::ARMING_STATE_ARMED_ERROR) ||
+		bool vehicle_status_updated;
+		ret = orb_check(vehicle_status_sub, &vehicle_status_updated);
+
+		if (ret == 0 && vehicle_status_updated) {
+			vehicle_status_s vehicle_status;
+			orb_copy(ORB_ID(vehicle_status), vehicle_status_sub, &vehicle_status);
+			bool armed = (vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED) ||
+				     (vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED_ERROR) ||
 				     _arm_override;
 
 			if (_was_armed != armed && !_log_until_shutdown) {
 				_was_armed = armed;
 
 				if (armed) {
-					start_log();
+					start_log_file();
 
 #ifdef DBGPRINT
 					timer_start = hrt_absolute_time();
@@ -688,12 +762,45 @@ void Logger::run()
 #endif /* DBGPRINT */
 
 				} else {
-					stop_log();
+					stop_log_file();
 				}
 			}
 		}
 
-		if (_enabled) {
+		/* check for logging command from MAVLink */
+		if (vehicle_command_sub != -1) {
+			bool command_updated = false;
+			ret = orb_check(vehicle_command_sub, &command_updated);
+
+			if (ret == 0 && command_updated) {
+				vehicle_command_s command;
+				orb_copy(ORB_ID(vehicle_command), vehicle_command_sub, &command);
+
+				if (command.command == vehicle_command_s::VEHICLE_CMD_LOGGING_START) {
+					if ((int)(command.param1 + 0.5f) != 0) {
+						ack_vehicle_command(vehicle_command_ack_pub, command.command,
+								    vehicle_command_s::VEHICLE_CMD_RESULT_UNSUPPORTED);
+
+					} else if (can_start_mavlink_log()) {
+						ack_vehicle_command(vehicle_command_ack_pub, command.command,
+								    vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED);
+						start_log_mavlink();
+
+					} else {
+						ack_vehicle_command(vehicle_command_ack_pub, command.command,
+								    vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED);
+					}
+
+				} else if (command.command == vehicle_command_s::VEHICLE_CMD_LOGGING_STOP) {
+					stop_log_mavlink();
+					ack_vehicle_command(vehicle_command_ack_pub, command.command,
+							    vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED);
+				}
+			}
+		}
+
+
+		if (_writer.is_started()) {
 
 			bool data_written = false;
 
@@ -707,6 +814,8 @@ void Logger::run()
 			/* wait for lock on log buffer */
 			_writer.lock();
 
+			int sub_idx = 0;
+
 			for (LoggerSubscription &sub : _subscriptions) {
 				/* each message consists of a header followed by an orb data object
 				 */
@@ -716,7 +825,8 @@ void Logger::run()
 				 * and write a message to the log
 				 */
 				for (uint8_t instance = 0; instance < ORB_MULTI_MAX_INSTANCES; instance++) {
-					if (copy_if_updated_multi(sub, instance, _msg_buffer + sizeof(ulog_message_data_header_s))) {
+					if (copy_if_updated_multi(sub, instance, _msg_buffer + sizeof(ulog_message_data_header_s),
+								  sub_idx == next_subscribe_topic_index)) {
 
 						uint16_t write_msg_size = static_cast<uint16_t>(msg_size - ULOG_MSG_HEADER_LEN);
 						//write one byte after another (necessary because of alignment)
@@ -729,7 +839,7 @@ void Logger::run()
 
 						//PX4_INFO("topic: %s, size = %zu, out_size = %zu", sub.metadata->o_name, sub.metadata->o_size, msg_size);
 
-						if (write(_msg_buffer, msg_size)) {
+						if (write_message(_msg_buffer, msg_size)) {
 
 #ifdef DBGPRINT
 							total_bytes += msg_size;
@@ -742,12 +852,18 @@ void Logger::run()
 						}
 					}
 				}
+
+				++sub_idx;
 			}
 
 			//check for new logging message(s)
-			if (log_message_sub.check_updated()) {
-				log_message_sub.update();
-				const char *message = (const char *)log_message_sub.get().text;
+			bool log_message_updated = false;
+			ret = orb_check(log_message_sub, &log_message_updated);
+
+			if (ret == 0 && log_message_updated) {
+				log_message_s log_message;
+				orb_copy(ORB_ID(log_message), log_message_sub, &log_message);
+				const char *message = (const char *)log_message.text;
 				int message_len = strlen(message);
 
 				if (message_len > 0) {
@@ -756,16 +872,16 @@ void Logger::run()
 					_msg_buffer[0] = (uint8_t)write_msg_size;
 					_msg_buffer[1] = (uint8_t)(write_msg_size >> 8);
 					_msg_buffer[2] = static_cast<uint8_t>(ULogMessageType::LOGGING);
-					_msg_buffer[3] = log_message_sub.get().severity + '0';
-					memcpy(_msg_buffer + 4, &log_message_sub.get().timestamp, sizeof(ulog_message_logging_s::timestamp));
+					_msg_buffer[3] = log_message.severity + '0';
+					memcpy(_msg_buffer + 4, &log_message.timestamp, sizeof(ulog_message_logging_s::timestamp));
 					strncpy((char *)(_msg_buffer + 12), message, sizeof(ulog_message_logging_s::message));
 
-					write(_msg_buffer, write_msg_size + ULOG_MSG_HEADER_LEN);
+					write_message(_msg_buffer, write_msg_size + ULOG_MSG_HEADER_LEN);
 				}
 			}
 
-			if (!_dropout_start && _writer.get_buffer_fill_count() > _high_water) {
-				_high_water = _writer.get_buffer_fill_count();
+			if (!_dropout_start && _writer.get_buffer_fill_count_file() > _high_water) {
+				_high_water = _writer.get_buffer_fill_count_file();
 			}
 
 			/* release the log buffer */
@@ -774,6 +890,17 @@ void Logger::run()
 			/* notify the writer thread if data is available */
 			if (data_written) {
 				_writer.notify();
+			}
+
+			/* subscription update */
+			if (next_subscribe_topic_index != -1) {
+				if (++next_subscribe_topic_index >= _subscriptions.size()) {
+					next_subscribe_topic_index = -1;
+					next_subscribe_check = hrt_absolute_time() + TRY_SUBSCRIBE_INTERVAL;
+				}
+
+			} else if (hrt_absolute_time() > next_subscribe_check) {
+				next_subscribe_topic_index = 0;
 			}
 
 #ifdef DBGPRINT
@@ -812,15 +939,6 @@ void Logger::run()
 	// stop the writer thread
 	_writer.thread_stop();
 
-	_writer.notify();
-
-	// wait for thread to complete
-	ret = pthread_join(writer_thread, NULL);
-
-	if (ret) {
-		PX4_WARN("join failed: %d", ret);
-	}
-
 	//unsubscribe
 	for (LoggerSubscription &sub : _subscriptions) {
 		for (uint8_t instance = 0; instance < ORB_MULTI_MAX_INSTANCES; instance++) {
@@ -835,11 +953,19 @@ void Logger::run()
 		orb_unadvertise(_mavlink_log_pub);
 		_mavlink_log_pub = nullptr;
 	}
+
+	if (vehicle_command_ack_pub) {
+		orb_unadvertise(vehicle_command_ack_pub);
+	}
+
+	if (vehicle_command_sub != -1) {
+		orb_unsubscribe(vehicle_command_sub);
+	}
 }
 
-bool Logger::write(void *ptr, size_t size)
+bool Logger::write_message(void *ptr, size_t size)
 {
-	if (_writer.write(ptr, size, _dropout_start)) {
+	if (_writer.write_message(ptr, size, _dropout_start) != -1) {
 
 		if (_dropout_start) {
 			float dropout_duration = (float)(hrt_elapsed_time(&_dropout_start) / 1000) / 1.e3f;
@@ -1011,12 +1137,13 @@ bool Logger::get_log_time(struct tm *tt, bool boot_time)
 
 	if (orb_copy(ORB_ID(vehicle_gps_position), vehicle_gps_position_sub, &gps_pos) == 0) {
 		utc_time_sec = gps_pos.time_utc_usec / 1e6;
-		orb_unsubscribe(vehicle_gps_position_sub);
 
 		if (gps_pos.fix_type >= 2 && utc_time_sec >= GPS_EPOCH_SECS) {
 			use_clock_time = false;
 		}
 	}
+
+	orb_unsubscribe(vehicle_gps_position_sub);
 
 	if (use_clock_time) {
 		/* take clock time if there's no fix (yet) */
@@ -1046,13 +1173,13 @@ bool Logger::get_log_time(struct tm *tt, bool boot_time)
 	return gmtime_r(&utc_time_sec, tt) != nullptr;
 }
 
-void Logger::start_log()
+void Logger::start_log_file()
 {
-	if (_enabled) {
+	if (_writer.is_started(LogWriter::BackendFile) || (_writer.backend() & LogWriter::BackendFile) == 0) {
 		return;
 	}
 
-	PX4_INFO("start log");
+	PX4_INFO("Start file log");
 
 	char file_name[LOG_DIR_LEN] = "";
 
@@ -1063,39 +1190,52 @@ void Logger::start_log()
 
 	/* print logging path, important to find log file later */
 	mavlink_log_info(&_mavlink_log_pub, "[logger] file: %s", file_name);
-	_next_topic_id = 0;
 
-	_writer.start_log(file_name);
+	_writer.start_log_file(file_name);
+	_writer.select_write_backend(LogWriter::BackendFile);
+	_writer.set_need_reliable_transfer(true);
 	write_header();
 	write_version();
 	write_formats();
 	write_parameters();
 	write_all_add_logged_msg();
+	_writer.set_need_reliable_transfer(false);
+	_writer.unselect_write_backend();
 	_writer.notify();
-	_enabled = true;
-	_start_time = hrt_absolute_time();
+
+	_start_time_file = hrt_absolute_time();
 }
 
-void Logger::stop_log()
+void Logger::stop_log_file()
 {
-	if (!_enabled) {
+	_writer.stop_log_file();
+}
+
+void Logger::start_log_mavlink()
+{
+	if (!can_start_mavlink_log()) {
 		return;
 	}
 
-	_enabled = false;
-	_writer.stop_log();
+	PX4_INFO("Start mavlink log");
+
+	_writer.start_log_mavlink();
+	_writer.select_write_backend(LogWriter::BackendMavlink);
+	_writer.set_need_reliable_transfer(true);
+	write_header();
+	write_version();
+	write_formats();
+	write_parameters();
+	write_all_add_logged_msg();
+	_writer.set_need_reliable_transfer(false);
+	_writer.unselect_write_backend();
+	_writer.notify();
 }
 
-bool Logger::write_wait(void *ptr, size_t size)
+void Logger::stop_log_mavlink()
 {
-	while (!_writer.write(ptr, size)) {
-		_writer.unlock();
-		_writer.notify();
-		usleep(_log_interval);
-		_writer.lock();
-	}
-
-	return true;
+	PX4_INFO("Stop mavlink log");
+	_writer.stop_log_mavlink();
 }
 
 void Logger::write_formats()
@@ -1110,7 +1250,7 @@ void Logger::write_formats()
 		size_t msg_size = sizeof(msg) - sizeof(msg.format) + format_len;
 		msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
 
-		write_wait(&msg, msg_size);
+		write_message(&msg, msg_size);
 	}
 
 	_writer.unlock();
@@ -1135,9 +1275,12 @@ void Logger::write_add_logged_msg(LoggerSubscription &subscription, int instance
 {
 	ulog_message_add_logged_s msg;
 
+	if (subscription.msg_ids[instance] == (uint16_t) - 1) {
+		subscription.msg_ids[instance] = _next_topic_id++;
+	}
+
+	msg.msg_id = subscription.msg_ids[instance];
 	msg.multi_id = instance;
-	subscription.msg_ids[instance] = _next_topic_id;
-	msg.msg_id = _next_topic_id;
 
 	int message_name_len = strlen(subscription.metadata->o_name);
 
@@ -1146,54 +1289,68 @@ void Logger::write_add_logged_msg(LoggerSubscription &subscription, int instance
 	size_t msg_size = sizeof(msg) - sizeof(msg.message_name) + message_name_len;
 	msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
 
-	write_wait(&msg, msg_size);
-
-	++_next_topic_id;
+	bool prev_reliable = _writer.need_reliable_transfer();
+	_writer.set_need_reliable_transfer(true);
+	write_message(&msg, msg_size);
+	_writer.set_need_reliable_transfer(prev_reliable);
 }
 
 /* write info message */
 void Logger::write_info(const char *name, const char *value)
 {
 	_writer.lock();
-	uint8_t buffer[sizeof(ulog_message_info_header_s)];
-	ulog_message_info_header_s *msg = reinterpret_cast<ulog_message_info_header_s *>(buffer);
-	msg->msg_type = static_cast<uint8_t>(ULogMessageType::INFO);
+	ulog_message_info_header_s msg;
+	uint8_t *buffer = reinterpret_cast<uint8_t *>(&msg);
+	msg.msg_type = static_cast<uint8_t>(ULogMessageType::INFO);
 
 	/* construct format key (type and name) */
 	size_t vlen = strlen(value);
-	msg->key_len = snprintf(msg->key, sizeof(msg->key), "char[%zu] %s", vlen, name);
-	size_t msg_size = sizeof(*msg) - sizeof(msg->key) + msg->key_len;
+	msg.key_len = snprintf(msg.key, sizeof(msg.key), "char[%zu] %s", vlen, name);
+	size_t msg_size = sizeof(msg) - sizeof(msg.key) + msg.key_len;
 
 	/* copy string value directly to buffer */
-	if (vlen < (sizeof(*msg) - msg_size)) {
+	if (vlen < (sizeof(msg) - msg_size)) {
 		memcpy(&buffer[msg_size], value, vlen);
 		msg_size += vlen;
 
-		msg->msg_size = msg_size - ULOG_MSG_HEADER_LEN;
+		msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
 
-		write_wait(buffer, msg_size);
+		write_message(buffer, msg_size);
 	}
 
 	_writer.unlock();
 }
+
 void Logger::write_info(const char *name, int32_t value)
 {
+	write_info_template<int32_t>(name, value, "int32_t");
+}
+
+void Logger::write_info(const char *name, uint32_t value)
+{
+	write_info_template<uint32_t>(name, value, "uint32_t");
+}
+
+
+template<typename T>
+void Logger::write_info_template(const char *name, T value, const char *type_str)
+{
 	_writer.lock();
-	uint8_t buffer[sizeof(ulog_message_info_header_s)];
-	ulog_message_info_header_s *msg = reinterpret_cast<ulog_message_info_header_s *>(buffer);
-	msg->msg_type = static_cast<uint8_t>(ULogMessageType::INFO);
+	ulog_message_info_header_s msg;
+	uint8_t *buffer = reinterpret_cast<uint8_t *>(&msg);
+	msg.msg_type = static_cast<uint8_t>(ULogMessageType::INFO);
 
 	/* construct format key (type and name) */
-	msg->key_len = snprintf(msg->key, sizeof(msg->key), "int32_t %s", name);
-	size_t msg_size = sizeof(*msg) - sizeof(msg->key) + msg->key_len;
+	msg.key_len = snprintf(msg.key, sizeof(msg.key), "%s %s", type_str, name);
+	size_t msg_size = sizeof(msg) - sizeof(msg.key) + msg.key_len;
 
 	/* copy string value directly to buffer */
-	memcpy(&buffer[msg_size], &value, sizeof(int32_t));
-	msg_size += sizeof(int32_t);
+	memcpy(&buffer[msg_size], &value, sizeof(T));
+	msg_size += sizeof(T);
 
-	msg->msg_size = msg_size - ULOG_MSG_HEADER_LEN;
+	msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
 
-	write_wait(buffer, msg_size);
+	write_message(buffer, msg_size);
 
 	_writer.unlock();
 }
@@ -1211,16 +1368,53 @@ void Logger::write_header()
 	header.magic[7] = 0x00; //file version 0
 	header.timestamp = hrt_absolute_time();
 	_writer.lock();
-	write_wait(&header, sizeof(header));
+	write_message(&header, sizeof(header));
 	_writer.unlock();
 }
 
 /* write version info messages */
 void Logger::write_version()
 {
-	write_info("ver_sw", PX4_GIT_VERSION_STR);
-	write_info("ver_hw", HW_ARCH);
+	write_info("ver_sw", px4_firmware_version_string());
+	write_info("ver_sw_release", px4_firmware_version());
+	write_info("ver_hw", px4_board_name());
 	write_info("sys_name", "PX4");
+	write_info("sys_os_name", px4_os_name());
+	const char *os_version = px4_os_version_string();
+
+	if (os_version) {
+		write_info("sys_os_ver", os_version);
+	}
+
+	write_info("sys_os_ver_release", px4_os_version());
+	write_info("sys_toolchain", px4_toolchain_name());
+	write_info("sys_toolchain_ver", px4_toolchain_version());
+
+	char revision;
+	char *chip_name;
+
+	if (mcu_version(&revision, &chip_name) >= 0) {
+		char mcu_ver[64];
+		snprintf(mcu_ver, sizeof(mcu_ver), "%s, rev. %c", chip_name, revision);
+		write_info("sys_mcu", mcu_ver);
+	}
+
+	/* write the UUID if enabled */
+	param_t write_uuid_param = param_find("SDLOG_UUID");
+
+	if (write_uuid_param != PARAM_INVALID) {
+		uint32_t write_uuid;
+		param_get(write_uuid_param, &write_uuid);
+
+		if (write_uuid == 1) {
+			uint32_t uuid[3];
+			mcu_unique_id(uuid);
+			char uuid_string[sizeof(uint32_t) * 3 * 2 + 1];
+			snprintf(uuid_string, sizeof(uuid_string), "%08x%08x%08x", uuid[0], uuid[1], uuid[2]);
+			write_info("sys_uuid", uuid_string);
+		}
+	}
+
 	int32_t utc_offset = 0;
 
 	if (_log_utc_offset != PARAM_INVALID) {
@@ -1236,10 +1430,10 @@ void Logger::write_version()
 void Logger::write_parameters()
 {
 	_writer.lock();
-	uint8_t buffer[sizeof(ulog_message_parameter_header_s) + sizeof(param_value_u)];
-	ulog_message_parameter_header_s *msg = reinterpret_cast<ulog_message_parameter_header_s *>(buffer);
+	ulog_message_parameter_header_s msg;
+	uint8_t *buffer = reinterpret_cast<uint8_t *>(&msg);
 
-	msg->msg_type = static_cast<uint8_t>(ULogMessageType::PARAMETER);
+	msg.msg_type = static_cast<uint8_t>(ULogMessageType::PARAMETER);
 	int param_idx = 0;
 	param_t param = 0;
 
@@ -1273,16 +1467,16 @@ void Logger::write_parameters()
 			}
 
 			/* format parameter key (type and name) */
-			msg->key_len = snprintf(msg->key, sizeof(msg->key), "%s %s", type_str, param_name(param));
-			size_t msg_size = sizeof(*msg) - sizeof(msg->key) + msg->key_len;
+			msg.key_len = snprintf(msg.key, sizeof(msg.key), "%s %s", type_str, param_name(param));
+			size_t msg_size = sizeof(msg) - sizeof(msg.key) + msg.key_len;
 
 			/* copy parameter value directly to buffer */
 			param_get(param, &buffer[msg_size]);
 			msg_size += value_size;
 
-			msg->msg_size = msg_size - ULOG_MSG_HEADER_LEN;
+			msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
 
-			write_wait(buffer, msg_size);
+			write_message(buffer, msg_size);
 		}
 	} while ((param != PARAM_INVALID) && (param_idx < (int) param_count()));
 
@@ -1293,10 +1487,10 @@ void Logger::write_parameters()
 void Logger::write_changed_parameters()
 {
 	_writer.lock();
-	uint8_t buffer[sizeof(ulog_message_parameter_header_s) + sizeof(param_value_u)];
-	ulog_message_parameter_header_s *msg = reinterpret_cast<ulog_message_parameter_header_s *>(buffer);
+	ulog_message_parameter_header_s msg;
+	uint8_t *buffer = reinterpret_cast<uint8_t *>(&msg);
 
-	msg->msg_type = static_cast<uint8_t>(ULogMessageType::PARAMETER);
+	msg.msg_type = static_cast<uint8_t>(ULogMessageType::PARAMETER);
 	int param_idx = 0;
 	param_t param = 0;
 
@@ -1331,17 +1525,17 @@ void Logger::write_changed_parameters()
 			}
 
 			/* format parameter key (type and name) */
-			msg->key_len = snprintf(msg->key, sizeof(msg->key), "%s %s", type_str, param_name(param));
-			size_t msg_size = sizeof(*msg) - sizeof(msg->key) + msg->key_len;
+			msg.key_len = snprintf(msg.key, sizeof(msg.key), "%s %s", type_str, param_name(param));
+			size_t msg_size = sizeof(msg) - sizeof(msg.key) + msg.key_len;
 
 			/* copy parameter value directly to buffer */
 			param_get(param, &buffer[msg_size]);
 			msg_size += value_size;
 
 			/* msg_size is now 1 (msg_type) + 2 (msg_size) + 1 (key_len) + key_len + value_size */
-			msg->msg_size = msg_size - ULOG_MSG_HEADER_LEN;
+			msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
 
-			write_wait(buffer, msg_size);
+			write_message(buffer, msg_size);
 		}
 	} while ((param != PARAM_INVALID) && (param_idx < (int) param_count()));
 
@@ -1367,6 +1561,23 @@ int Logger::check_free_space()
 	}
 
 	return PX4_OK;
+}
+
+void Logger::ack_vehicle_command(orb_advert_t &vehicle_command_ack_pub, uint16_t command, uint32_t result)
+{
+	vehicle_command_ack_s vehicle_command_ack;
+	vehicle_command_ack.timestamp = hrt_absolute_time();
+	vehicle_command_ack.command = command;
+	vehicle_command_ack.result = result;
+
+	if (vehicle_command_ack_pub == nullptr) {
+		vehicle_command_ack_pub = orb_advertise_queue(ORB_ID(vehicle_command_ack), &vehicle_command_ack,
+					  vehicle_command_ack_s::ORB_QUEUE_LENGTH);
+
+	} else {
+		orb_publish(ORB_ID(vehicle_command_ack), vehicle_command_ack_pub, &vehicle_command_ack);
+	}
+
 }
 
 }

@@ -38,6 +38,7 @@
 #include <px4_posix.h>
 #include <errno.h>
 #include <termios.h>
+#include <cmath>	// NAN
 
 #include <systemlib/px4_macros.h>
 #include <drivers/device/device.h>
@@ -48,6 +49,7 @@
 #include <uORB/topics/test_motor.h>
 #include <uORB/topics/input_rc.h>
 #include <uORB/topics/esc_status.h>
+#include <uORB/topics/multirotor_motor_limits.h>
 
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_mixer.h>
@@ -121,6 +123,7 @@ private:
 	orb_id_t	_control_topics[actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS];
 
 	orb_advert_t        _esc_feedback_pub = nullptr;
+	orb_advert_t      _to_mixer_status; 	///< mixer status flags
 	esc_status_s      _esc_feedback;
 	uint8_t           _channels_count; // The number of ESC channels
 
@@ -171,6 +174,7 @@ TAP_ESC::TAP_ESC(int channels_count):
 	_outputs_pub(nullptr),
 	_control_subs{ -1},
 	_esc_feedback_pub(nullptr),
+	_to_mixer_status(nullptr),
 	_esc_feedback{},
 	_channels_count(channels_count),
 	_mixers(nullptr),
@@ -228,7 +232,7 @@ TAP_ESC::init()
 
 	ASSERT(!_initialized);
 
-	/* Respect boot time requierd by the ESC FW */
+	/* Respect boot time required by the ESC FW */
 
 	hrt_abstime uptime_us = hrt_absolute_time();
 
@@ -260,6 +264,9 @@ TAP_ESC::init()
 	if (ret < 0) {
 		return ret;
 	}
+
+#ifdef CONFIG_ARCH_BOARD_AEROFC_V1
+#else
 
 	/* Verify All ESC got the config */
 
@@ -303,7 +310,10 @@ TAP_ESC::init()
 		if (!valid) {
 			return -EIO;
 		}
+
 	}
+
+#endif
 
 	/* To Unlock the ESC from the Power up state we need to issue 10
 	 * ESCBUS_MSG_ID_RUN request with all the values 0;
@@ -368,7 +378,7 @@ TAP_ESC::subscribe()
 
 		if (unsub_groups & (1 << i)) {
 			DEVICE_DEBUG("unsubscribe from actuator_controls_%d", i);
-			::close(_control_subs[i]);
+			orb_unsubscribe(_control_subs[i]);
 			_control_subs[i] = -1;
 		}
 
@@ -563,6 +573,8 @@ TAP_ESC::cycle()
 		/* advertise the mixed control outputs, insist on the first group output */
 		_outputs_pub = orb_advertise(ORB_ID(actuator_outputs), &_outputs);
 		_esc_feedback_pub = orb_advertise(ORB_ID(esc_report), &_esc_feedback);
+		multirotor_motor_limits_s multirotor_motor_limits = {};
+		_to_mixer_status = orb_advertise(ORB_ID(multirotor_motor_limits), &multirotor_motor_limits);
 		_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 		_test_motor_sub = orb_subscribe(ORB_ID(test_motor));
 		_initialized = true;
@@ -633,11 +645,16 @@ TAP_ESC::cycle()
 		/* can we mix? */
 		if (_is_armed && _mixers != nullptr) {
 
-
 			/* do mixing */
 			num_outputs = _mixers->mix(&_outputs.output[0], num_outputs, NULL);
 			_outputs.noutputs = num_outputs;
 			_outputs.timestamp = hrt_absolute_time();
+
+			/* publish mixer status */
+			multirotor_motor_limits_s multirotor_motor_limits = {};
+			multirotor_motor_limits.saturation_status = _mixers->get_saturation_status();
+
+			orb_publish(ORB_ID(multirotor_motor_limits), _to_mixer_status, &multirotor_motor_limits);
 
 			/* disable unused ports by setting their output to NaN */
 			for (size_t i = num_outputs; i < sizeof(_outputs.output) / sizeof(_outputs.output[0]); i++) {
@@ -709,6 +726,13 @@ TAP_ESC::cycle()
 			motor_out[5] = _outputs.output[5];
 			motor_out[6] = RPMSTOPPED;
 			motor_out[7] = RPMSTOPPED;
+
+		} else if (num_outputs == 4) {
+
+			motor_out[0] = _outputs.output[2];
+			motor_out[2] = _outputs.output[0];
+			motor_out[1] = _outputs.output[1];
+			motor_out[3] = _outputs.output[3];
 
 		} else {
 

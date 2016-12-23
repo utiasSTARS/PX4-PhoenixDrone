@@ -93,7 +93,7 @@
  *
  * PLL source is HSE
  * PLL_VCO = (STM32_HSE_FREQUENCY / PLLM) * PLLN
- *         = (25,000,000 / 25) * 336
+ *         = (8,000,000 / 8) * 336
  *         = 336,000,000
  * SYSCLK  = PLL_VCO / PLLP
  *         = 336,000,000 / 2 = 168,000,000
@@ -147,40 +147,52 @@
 
 /* Timer Frequencies, if APBx is set to 1, frequency is same to APBx
  * otherwise frequency is 2xAPBx.
- * Note: TIM1,8 are on APB2, others on APB1
+ * Note: TIM1,8-11 are on APB2, others on APB1
  */
 
-#define STM32_TIM18_FREQUENCY   (2*STM32_PCLK2_FREQUENCY)
-#define STM32_TIM27_FREQUENCY   (2*STM32_PCLK1_FREQUENCY)
+#define BOARD_TIM1_FREQUENCY    STM32_APB2_TIM1_CLKIN
+#define BOARD_TIM2_FREQUENCY    STM32_APB1_TIM2_CLKIN
+#define BOARD_TIM3_FREQUENCY    STM32_APB1_TIM3_CLKIN
+#define BOARD_TIM4_FREQUENCY    STM32_APB1_TIM4_CLKIN
+#define BOARD_TIM5_FREQUENCY    STM32_APB1_TIM5_CLKIN
+#define BOARD_TIM6_FREQUENCY    STM32_APB1_TIM6_CLKIN
+#define BOARD_TIM7_FREQUENCY    STM32_APB1_TIM7_CLKIN
+#define BOARD_TIM8_FREQUENCY    STM32_APB2_TIM8_CLKIN
+#define BOARD_TIM9_FREQUENCY    STM32_APB2_TIM9_CLKIN
+#define BOARD_TIM10_FREQUENCY   STM32_APB2_TIM10_CLKIN
+#define BOARD_TIM11_FREQUENCY   STM32_APB2_TIM11_CLKIN
+#define BOARD_TIM12_FREQUENCY   STM32_APB1_TIM12_CLKIN
+#define BOARD_TIM13_FREQUENCY   STM32_APB1_TIM13_CLKIN
+#define BOARD_TIM14_FREQUENCY   STM32_APB1_TIM14_CLKIN
 
 /* SDIO dividers.  Note that slower clocking is required when DMA is disabled
  * in order to avoid RX overrun/TX underrun errors due to delayed responses
  * to service FIFOs in interrupt driven mode.  These values have not been
  * tuned!!!
  *
- * HCLK=72MHz, SDIOCLK=72MHz, SDIO_CK=HCLK/(178+2)=400 KHz
+ * SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(118+2)=400 KHz
  */
 
-#define SDIO_INIT_CLKDIV        (178 << SDIO_CLKCR_CLKDIV_SHIFT)
+#define SDIO_INIT_CLKDIV        (118 << SDIO_CLKCR_CLKDIV_SHIFT)
 
-/* DMA ON:  HCLK=72 MHz, SDIOCLK=72MHz, SDIO_CK=HCLK/(2+2)=18 MHz
- * DMA OFF: HCLK=72 MHz, SDIOCLK=72MHz, SDIO_CK=HCLK/(3+2)=14.4 MHz
+/* DMA ON:  SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(1+2)=16 MHz
+ * DMA OFF: SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(2+2)=12 MHz
  */
 
 #ifdef CONFIG_SDIO_DMA
-#  define SDIO_MMCXFR_CLKDIV    (2 << SDIO_CLKCR_CLKDIV_SHIFT)
+#  define SDIO_MMCXFR_CLKDIV    (1 << SDIO_CLKCR_CLKDIV_SHIFT)
 #else
-#  define SDIO_MMCXFR_CLKDIV    (3 << SDIO_CLKCR_CLKDIV_SHIFT)
+#  define SDIO_MMCXFR_CLKDIV    (2 << SDIO_CLKCR_CLKDIV_SHIFT)
 #endif
 
-/* DMA ON:  HCLK=72 MHz, SDIOCLK=72MHz, SDIO_CK=HCLK/(1+2)=24 MHz
- * DMA OFF: HCLK=72 MHz, SDIOCLK=72MHz, SDIO_CK=HCLK/(3+2)=14.4 MHz
+/* DMA ON:  SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(1+2)=16 MHz
+ * DMA OFF: SDIOCLK=48MHz, SDIO_CK=SDIOCLK/(2+2)=12 MHz
  */
 
 #ifdef CONFIG_SDIO_DMA
 #  define SDIO_SDXFR_CLKDIV     (1 << SDIO_CLKCR_CLKDIV_SHIFT)
 #else
-#  define SDIO_SDXFR_CLKDIV     (3 << SDIO_CLKCR_CLKDIV_SHIFT)
+#  define SDIO_SDXFR_CLKDIV     (2 << SDIO_CLKCR_CLKDIV_SHIFT)
 #endif
 
 /* DMA Channl/Stream Selections *****************************************************/
@@ -199,8 +211,8 @@
 /*
  * UARTs.
  */
-#define GPIO_USART1_RX	GPIO_USART1_RX_1	/* console in from IO */
-#define GPIO_USART1_TX	0			/* USART1 is RX-only */
+#define GPIO_USART1_RX	GPIO_USART1_RX_2	/* RC_INPUT */
+#define GPIO_USART1_TX	GPIO_USART1_TX_2
 
 #define GPIO_USART2_RX	GPIO_USART2_RX_2
 #define GPIO_USART2_TX	GPIO_USART2_TX_2
@@ -215,8 +227,8 @@
 #define GPIO_UART4_RX	GPIO_UART4_RX_1
 #define GPIO_UART4_TX	GPIO_UART4_TX_1
 
-#define GPIO_USART6_RX	GPIO_USART6_RX_1
-#define GPIO_USART6_TX	GPIO_USART6_TX_1
+#define GPIO_USART6_RX	GPIO_USART6_RX_2
+#define GPIO_USART6_TX	GPIO_USART6_TX_2
 
 #define GPIO_UART7_RX	GPIO_UART7_RX_1
 #define GPIO_UART7_TX	GPIO_UART7_TX_1
@@ -231,12 +243,9 @@
  * CAN
  *
  * CAN1 is routed to the onboard transceiver.
- * CAN2 is routed to the expansion connector.
  */
 #define GPIO_CAN1_RX	GPIO_CAN1_RX_3
 #define GPIO_CAN1_TX	GPIO_CAN1_TX_3
-#define GPIO_CAN2_RX	GPIO_CAN2_RX_1
-#define GPIO_CAN2_TX	GPIO_CAN2_TX_2
 
 /*
  * I2C
@@ -261,7 +270,7 @@
  * There are sensors on SPI1, and SPI2 is connected to the FRAM.
  */
 #define GPIO_SPI1_MISO	(GPIO_SPI1_MISO_1|GPIO_SPEED_50MHz)
-#define GPIO_SPI1_MOSI	(GPIO_SPI1_MOSI_1|GPIO_SPEED_50MHz)
+#define GPIO_SPI1_MOSI	(GPIO_SPI1_MOSI_2|GPIO_SPEED_50MHz)
 #define GPIO_SPI1_SCK	(GPIO_SPI1_SCK_1|GPIO_SPEED_50MHz)
 
 #define GPIO_SPI2_MISO	(GPIO_SPI2_MISO_1|GPIO_SPEED_50MHz)

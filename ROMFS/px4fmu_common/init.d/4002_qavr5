@@ -8,6 +8,9 @@
 # @output AUX2 feed-through of RC AUX2 channel
 # @output AUX3 feed-through of RC AUX3 channel
 #
+# @board px4fmu-v1 exclude
+# @board px4fmu-v2 exclude
+#
 # @maintainer James Goppert <james.goppert@gmail.com>
 #
 
@@ -28,8 +31,8 @@ then
 	param set MC_YAWRATE_I 0.1
 	param set MC_YAWRATE_D 0.0
 	param set MC_YAW_FF 0.5
-	param set MC_TPA_BREAK 0.7
-	param set MC_TPA_SLOPE 1.0
+	param set MC_TPA_BREAK_P 0.7
+	param set MC_TPA_RATE_P 0.3
 	param set PWM_MIN 1075
 	param set MPC_THR_MIN 0.06
 	param set MPC_MANTHR_MIN 0.06

@@ -93,14 +93,11 @@ uORB::DeviceNode::DeviceNode(const struct orb_metadata *meta, const char *name, 
 	_data(nullptr),
 	_last_update(0),
 	_generation(0),
-	_priority(priority),
+	_priority((uint8_t)priority),
 	_published(false),
 	_queue_size(queue_size),
-	_publisher(0),
-#ifdef __PX4_NUTTX
-	_IsRemoteSubscriberPresent(false),
-#endif
-	_subscriber_count(0)
+	_subscriber_count(0),
+	_publisher(0)
 {
 	// enable debug() calls
 	//_debug_enabled = true;
@@ -427,7 +424,13 @@ uORB::DeviceNode::publish(const orb_metadata *meta, orb_advert_t handle, const v
 	uORB::DeviceNode *devnode = (uORB::DeviceNode *)handle;
 	int ret;
 
-	/* this is a bit risky, since we are trusting the handle in order to deref it */
+	/* check if the device handle is initialized */
+	if ((devnode == nullptr) || (meta == nullptr)) {
+		errno = EFAULT;
+		return ERROR;
+	}
+
+	/* check if the orb meta data matches the publication */
 	if (devnode->_meta != meta) {
 		errno = EINVAL;
 		return ERROR;
@@ -749,7 +752,8 @@ int uORB::DeviceNode::update_queue_size(unsigned int queue_size)
 		return PX4_OK;
 	}
 
-	if (_data || _queue_size > queue_size) {
+	//queue size is limited to 255 for the single reason that we use uint8 to store it
+	if (_data || _queue_size > queue_size || queue_size > 255) {
 		return ERROR;
 	}
 
@@ -914,9 +918,9 @@ uORB::DeviceMaster::ioctl(device::file_t *filp, int cmd, unsigned long arg)
 				} else {
 					// add to the node map;.
 #ifdef __PX4_NUTTX
-					_node_map.insert(nodepath, node);
+					_node_map.insert(devpath, node);
 #else
-					_node_map[std::string(nodepath)] = node;
+					_node_map[std::string(devpath)] = node;
 #endif
 				}
 

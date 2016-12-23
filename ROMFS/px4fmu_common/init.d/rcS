@@ -2,8 +2,38 @@
 #
 # PX4FMU startup script.
 #
-#  NOTE: COMMENT LINES ARE REMOVED BEFORE STORED IN ROMFS.
+# NOTE: environment variable references:
+#    If the dollar sign ('$') is followed by a left bracket ('{') then the
+#    variable name is terminated with the right bracket character ('}').
+#    Otherwise, the variable name goes to the end of the argument.
 #
+#
+# NOTE: COMMENT LINES ARE REMOVED BEFORE STORED IN ROMFS.
+#
+# UART mapping on FMUv1/2/3/4:
+#
+# UART1			/dev/ttyS0		IO debug
+# USART2		/dev/ttyS1		TELEM1 (flow control)
+# USART3		/dev/ttyS2		TELEM2 (flow control)
+# UART4
+# UART7							CONSOLE
+# UART8							SERIAL4
+#
+#
+# UART mapping on FMUv5:
+#
+# UART1			/dev/ttyS0		GPS
+# USART2		/dev/ttyS1		TELEM1 (flow control)
+# USART3		/dev/ttyS2		TELEM2 (flow control)
+# UART4			/dev/ttyS3		?
+# USART6		/dev/ttyS4		TELEM3 (flow control)
+# UART7			/dev/ttyS5		?
+# UART8			/dev/ttyS6		CONSOLE
+
+#
+# Mount the procfs.
+#
+mount -t procfs /proc
 
 #
 # Start CDC/ACM serial driver
@@ -24,8 +54,19 @@ set LOG_FILE /fs/microsd/bootlog.txt
 # REBOOTWORK this needs to start after the flight control loop
 if mount -t vfat /dev/mmcsd0 /fs/microsd
 then
-	# Start playing the startup tune
-	tone_alarm start
+	echo "[i] microSD mounted: /fs/microsd"
+	if hardfault_log check
+	then
+		tone_alarm error
+		if hardfault_log commit
+		then
+			hardfault_log reset
+			tone_alarm stop
+		fi
+  else
+    # Start playing the startup tune
+    tone_alarm start
+ fi
 else
 	tone_alarm MBAGP
 	if mkfatfs /dev/mmcsd0
@@ -50,7 +91,7 @@ fi
 set FRC /fs/microsd/etc/rc.txt
 if [ -f $FRC ]
 then
-	echo "INFO  [init] Executing script: $FRC"
+	echo "INFO  [init] Executing script: ${FRC}"
 	sh $FRC
 	set MODE custom
 fi
@@ -130,21 +171,22 @@ then
 	set MIXER_AUX none
 	set OUTPUT_MODE none
 	set PWM_OUT none
-	set PWM_RATE none
-	set PWM_DISARMED none
-	set PWM_MIN none
-	set PWM_MAX none
+	set PWM_RATE p:PWM_RATE
+	set PWM_DISARMED p:PWM_DISARMED
+	set PWM_MIN p:PWM_MIN
+	set PWM_MAX p:PWM_MAX
 	set PWM_AUX_OUT none
 	set PWM_AUX_RATE none
 	set PWM_ACHDIS none
-	set PWM_AUX_DISARMED none
-	set PWM_AUX_MIN none
-	set PWM_AUX_MAX none
+	set PWM_AUX_DISARMED p:PWM_AUX_DISARMED
+	set PWM_AUX_MIN p:PWM_AUX_MIN
+	set PWM_AUX_MAX p:PWM_AUX_MAX
 	set FAILSAFE_AUX none
 	set MK_MODE none
 	set FMU_MODE pwm
 	set AUX_MODE pwm
 	set MAVLINK_F default
+	set MAVLINK_COMPANION_DEVICE /dev/ttyS2
 	set EXIT_ON_END no
 	set MAV_TYPE none
 	set FAILSAFE none
@@ -158,6 +200,12 @@ then
 		if ver hwcmp PX4FMU_V4
 		then
 			set USE_IO no
+		fi
+
+		if ver hwcmp PX4FMU_V5
+		then
+			set USE_IO no
+			set MAVLINK_COMPANION_DEVICE /dev/ttyS3
 		fi
 
 		if ver hwcmp MINDPX_V2
@@ -175,18 +223,25 @@ then
 				set AUTOCNF yes
 			fi
 		fi
+
+		if ver hwcmp AEROFC_V1
+		then
+			set USE_IO no
+		fi
 	else
 		set USE_IO no
 	fi
 
-
-	# should set to 0.8 for mindpx-v2 borad.
-	if param compare INAV_LIDAR_ERR 0.5
+	if ver hwcmp AEROFC_V1
 	then
-		if ver hwcmp MINDPX_V2
+		if param compare SYS_AUTOSTART 0
 		then
-			param set INAV_LIDAR_ERR 0.8
+			set AUTOCNF yes
 		fi
+
+		# We don't allow changing AUTOSTART as it doesn't work in
+		# other configurations
+		param set SYS_AUTOSTART 4070
 	fi
 
 	#
@@ -206,13 +261,23 @@ then
 		set MIXER_AUX none
 	fi
 
+	if ver hwcmp PX4FMU_V5
+	then
+		set MIXER_AUX none
+	fi
+
+	if ver hwcmp AEROFC_V1
+	then
+		set MIXER_AUX none
+	fi
+
 	#
 	# Override parameters from user configuration file
 	#
 	set FCONFIG /fs/microsd/etc/config.txt
 	if [ -f $FCONFIG ]
 	then
-		echo "Custom: $FCONFIG"
+		echo "Custom: ${FCONFIG}"
 		sh $FCONFIG
 	fi
 	unset FCONFIG
@@ -262,8 +327,8 @@ then
 
 			if px4io forceupdate 14662 ${IO_FILE}
 			then
-				usleep 500000
-				if px4io checkcrc $IO_FILE
+				usleep 10000
+				if px4io checkcrc ${IO_FILE}
 				then
 					echo "PX4IO CRC OK after updating" >> $LOG_FILE
 					tone_alarm MLL8CDE
@@ -271,11 +336,11 @@ then
 					set IO_PRESENT yes
 				else
 					echo "PX4IO update failed" >> $LOG_FILE
-					tone_alarm $TUNE_ERR
+					tone_alarm ${TUNE_ERR}
 				fi
 			else
 				echo "PX4IO update failed" >> $LOG_FILE
-				tone_alarm $TUNE_ERR
+				tone_alarm ${TUNE_ERR}
 			fi
 		fi
 		unset IO_FILE
@@ -283,7 +348,7 @@ then
 		if [ $IO_PRESENT == no ]
 		then
 			echo "PX4IO not found" >> $LOG_FILE
-			tone_alarm $TUNE_ERR
+			tone_alarm ${TUNE_ERR}
 		fi
 	fi
 
@@ -315,6 +380,11 @@ then
 	if [ $OUTPUT_MODE == ardrone ]
 	then
 		set FMU_MODE gpio_serial
+	fi
+
+	if [ $OUTPUT_MODE == tap_esc ]
+	then
+		set FMU_MODE rcin
 	fi
 
 	if [ $HIL == yes ]
@@ -367,6 +437,20 @@ then
 		set OUTPUT_MODE uavcan_esc
 	fi
 
+	# Sensors on the PWM interface bank
+	# clear pins 5 and 6
+	if param compare SENS_EN_LL40LS 1
+	then
+		set FMU_MODE pwm4
+		set AUX_MODE pwm4
+	fi
+	if param greater TRIG_MODE 0
+	then
+		set FMU_MODE pwm4
+		set AUX_MODE pwm4
+		camera_trigger start
+	fi
+
 	# If OUTPUT_MODE == none then something is wrong with setup and we shouldn't try to enable output
 	if [ $OUTPUT_MODE != none ]
 	then
@@ -374,8 +458,8 @@ then
 		then
 			if param compare UAVCAN_ENABLE 0
 			then
-				echo "OVERRIDING UAVCAN_ENABLE = 1" >> $LOG_FILE
-				param set UAVCAN_ENABLE 1
+				echo "OVERRIDING UAVCAN_ENABLE = 3" >> $LOG_FILE
+				param set UAVCAN_ENABLE 3
 			fi
 		fi
 
@@ -461,10 +545,10 @@ then
 		else
 			if [ $OUTPUT_MODE != fmu -a $OUTPUT_MODE != ardrone ]
 			then
-				if fmu mode_$FMU_MODE
+				if fmu mode_${FMU_MODE}
 				then
 				else
-					echo "FMU mode_$FMU_MODE start failed" >> $LOG_FILE
+					echo "FMU mode_${FMU_MODE} start failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
 				fi
 
@@ -502,6 +586,11 @@ then
 				# Start MAVLink on Wifi (ESP8266 port)
 				mavlink start -r 20000 -m config -b 921600 -d /dev/ttyS0
 			fi
+
+			if ver hwcmp AEROFC_V1
+			then
+				set MAVLINK_F "-r 1200 -d /dev/ttyS4"
+			fi
 		fi
 
 		if ver hwcmp CRAZYFLIE
@@ -511,10 +600,10 @@ then
 		fi
 	fi
 
-	if [ $MAVLINK_F == "none" ]
+	if [ "x$MAVLINK_F" == xnone ]
 	then
 	else
-		mavlink start $MAVLINK_F
+		mavlink start ${MAVLINK_F}
 	fi
 	unset MAVLINK_F
 
@@ -528,7 +617,7 @@ then
 		# but this works for now
 		if param compare SYS_COMPANION 10
 		then
-			frsky_telemetry start -d /dev/ttyS2
+			frsky_telemetry start -d ${MAVLINK_COMPANION_DEVICE}
 		fi
 		if param compare SYS_COMPANION 20
 		then
@@ -537,50 +626,52 @@ then
 		fi
 		if param compare SYS_COMPANION 921600
 		then
-			mavlink start -d /dev/ttyS2 -b 921600 -m onboard -r 80000 -x
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 921600 -m onboard -r 80000 -x
 		fi
 		if param compare SYS_COMPANION 57600
 		then
-			mavlink start -d /dev/ttyS2 -b 57600 -m onboard -r 5000 -x
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m onboard -r 5000 -x
 		fi
 		if param compare SYS_COMPANION 157600
 		then
+<<<<<<< HEAD
 			mavlink start -d /dev/ttyS2 -b 115200 -m osd -r 1000
+=======
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m osd -r 1000
+>>>>>>> upstream/master
 		fi
 		if param compare SYS_COMPANION 257600
 		then
-			mavlink start -d /dev/ttyS2 -b 57600 -m magic -r 5000 -x
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m magic -r 5000 -x
 		fi
 		if param compare SYS_COMPANION 319200
 		then
-			mavlink start -d /dev/ttyS2 -b 19200 -r 1000
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 19200 -r 1000
 		fi
 		if param compare SYS_COMPANION 338400
 		then
-			mavlink start -d /dev/ttyS2 -b 38400 -r 1000
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 38400 -r 1000
 		fi
 		if param compare SYS_COMPANION 357600
 		then
-			mavlink start -d /dev/ttyS2 -b 57600 -r 1000
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -r 1000
+		fi
+		if param compare SYS_COMPANION 419200
+		then
+			iridiumsbd start -d /dev/ttyS2
+			mavlink start -d /dev/iridium -b 19200 -m iridium -r 10
 		fi
 		if param compare SYS_COMPANION 1921600
 		then
-			mavlink start -d /dev/ttyS2 -b 921600 -r 20000
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 921600 -r 20000
 		fi
-		# Sensors on the PWM interface bank
-		# clear pins 5 and 6
-		if param compare SENS_EN_LL40LS 1
+		if param compare SYS_COMPANION 1500000
 		then
-			set FMU_MODE pwm4
-			set AUX_MODE pwm4
-		fi
-		if param greater TRIG_MODE 0
-		then
-			set FMU_MODE pwm4
-			set AUX_MODE pwm4
-			camera_trigger start
+			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 1500000 -m onboard -r 10000 -x
 		fi
 	fi
+
+	unset MAVLINK_COMPANION_DEVICE
 
 	#
 	# Starting stuff according to UAVCAN_ENABLE value
@@ -589,17 +680,9 @@ then
 	then
 		if uavcan start
 		then
+			uavcan start fw
 		else
-			tone_alarm $TUNE_ERR
-		fi
-	fi
-
-	if param greater UAVCAN_ENABLE 1
-	then
-		if uavcan start fw
-		then
-		else
-			tone_alarm $TUNE_ERR
+			tone_alarm ${TUNE_ERR}
 		fi
 	fi
 
@@ -618,10 +701,18 @@ then
 		fi
 	fi
 
-	# sf0x lidar sensor
-	if param compare SENS_EN_SF0X 1
+	# lightware serial lidar sensor
+	if param compare SENS_EN_SF0X 0
 	then
+	else
 		sf0x start
+	fi
+
+	# lightware i2c lidar sensor
+	if param compare SENS_EN_SF1XX 0
+	then
+	else
+		sf1xx start
 	fi
 
 	# mb12xx sonar sensor
@@ -641,7 +732,18 @@ then
 		frsky_telemetry start -d /dev/ttyS6
 	fi
 
+	if ver hwcmp MINDPX_V2
+	then
+		frsky_telemetry start -d /dev/ttyS6
+	fi
+
 	if ver hwcmp PX4FMU_V2
+	then
+		# Check for flow sensor - as it is a background task, launch it last
+		px4flow start &
+	fi
+
+	if ver hwcmp PX4FMU_V4
 	then
 		# Check for flow sensor - as it is a background task, launch it last
 		px4flow start &
@@ -649,7 +751,6 @@ then
 
 	if ver hwcmp MINDPX_V2
 	then
-		#mindxp also need flow
 		px4flow start &
 	fi
 
@@ -666,30 +767,34 @@ then
 		then
 		fi
 	else
-		# check if we should increase logging rate for ekf2 replay message logging
-		if param greater EKF2_REC_RPL 0
+		if param compare SYS_LOGGER 0
 		then
-			if param compare SYS_LOGGER 0
+			# check if we should increase logging rate for ekf2 replay message logging
+			if param greater EKF2_REC_RPL 0
 			then
 				if sdlog2 start -r 500 -e -b 18 -t
 				then
 				fi
 			else
-				if logger start -r 500
+				if sdlog2 start -r 100 -a -b 9 -t
 				then
 				fi
 			fi
 		else
-			if param compare SYS_LOGGER 0
+			set LOGGER_ARGS ""
+			if param compare SDLOG_MODE 1
 			then
-				if sdlog2 start -r 100 -a -b 9 -t
-				then
-				fi
-			else
-				if logger start -b 12 -t
-				then
-				fi
+				set LOGGER_ARGS "-e"
 			fi
+			if param compare SDLOG_MODE 2
+			then
+				set LOGGER_ARGS "-f"
+			fi
+
+			if logger start -b 12 -t ${LOGGER_ARGS}
+			then
+			fi
+			unset LOGGER_ARGS
 		fi
 	fi
 
@@ -718,7 +823,7 @@ then
 			set MAV_TYPE 1
 		fi
 
-		param set MAV_TYPE $MAV_TYPE
+		param set MAV_TYPE ${MAV_TYPE}
 
 		# Load mixer and configure outputs
 		sh /etc/init.d/rc.interface
@@ -744,7 +849,7 @@ then
 			then
 				set MAV_TYPE 2
 			fi
-			if [ $MIXER == quad_w -o $MIXER == sk450_deadcat ]
+			if [ $MIXER == quad_w -o $MIXER == quad_dc ]
 			then
 				set MAV_TYPE 2
 			fi
@@ -784,7 +889,7 @@ then
 			echo "Unknown MAV_TYPE"
 			param set MAV_TYPE 2
 		else
-			param set MAV_TYPE $MAV_TYPE
+			param set MAV_TYPE ${MAV_TYPE}
 		fi
 
 		# Load mixer and configure outputs
@@ -827,7 +932,7 @@ then
 			echo "Unknown MAV_TYPE"
 			param set MAV_TYPE 19
 		else
-			param set MAV_TYPE $MAV_TYPE
+			param set MAV_TYPE ${MAV_TYPE}
 		fi
 
 		# Load mixer and configure outputs
@@ -915,7 +1020,7 @@ then
 	set FEXTRAS /fs/microsd/etc/extras.txt
 	if [ -f $FEXTRAS ]
 	then
-		echo "Addons script: $FEXTRAS"
+		echo "Addons script: ${FEXTRAS}"
 		sh $FEXTRAS
 	fi
 	unset FEXTRAS

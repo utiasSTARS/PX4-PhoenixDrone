@@ -108,13 +108,14 @@
  */
 #define MPU6000_TIMER_REDUCTION				200
 
-
 enum MPU6000_BUS {
 	MPU6000_BUS_ALL = 0,
 	MPU6000_BUS_I2C_INTERNAL,
 	MPU6000_BUS_I2C_EXTERNAL,
-	MPU6000_BUS_SPI_INTERNAL,
-	MPU6000_BUS_SPI_EXTERNAL
+	MPU6000_BUS_SPI_INTERNAL1,
+	MPU6000_BUS_SPI_INTERNAL2,
+	MPU6000_BUS_SPI_EXTERNAL1,
+	MPU6000_BUS_SPI_EXTERNAL2
 };
 
 class MPU6000_gyro;
@@ -219,6 +220,7 @@ private:
 	// this is used to support runtime checking of key
 	// configuration registers to detect SPI bus errors and sensor
 	// reset
+#define MPU6000_CHECKED_PRODUCT_ID_INDEX 0
 #define MPU6000_NUM_CHECKED_REGISTERS 10
 	static const uint8_t	_checked_registers[MPU6000_NUM_CHECKED_REGISTERS];
 	uint8_t			_checked_values[MPU6000_NUM_CHECKED_REGISTERS];
@@ -255,7 +257,7 @@ private:
 	/**
 	 * is_icm_device
 	 */
-	bool 		is_icm_device() { return _device_type == 20608;}
+	bool 		is_icm_device() { return !is_mpu_device();}
 	/**
 	 * is_mpu_device
 	 */
@@ -778,7 +780,28 @@ int
 MPU6000::probe()
 {
 	uint8_t whoami = read_reg(MPUREG_WHOAMI);
-	uint8_t expected = is_mpu_device() ? MPU_WHOAMI_6000 : ICM_WHOAMI_20608;
+	uint8_t expected = 0;
+	bool unknown_product_id = true;
+
+	switch (_device_type) {
+
+	default:
+	case 6000:
+		expected = MPU_WHOAMI_6000;
+		break;
+
+	case 20602:
+		expected = ICM_WHOAMI_20602;
+		break;
+
+	case 20608:
+		expected = ICM_WHOAMI_20608;
+		break;
+
+	case 20689:
+		expected = ICM_WHOAMI_20689;
+		break;
+	}
 
 	if (whoami != expected) {
 		DEVICE_DEBUG("unexpected WHOAMI 0x%02x", whoami);
@@ -802,15 +825,29 @@ MPU6000::probe()
 	case MPU6000_REV_D8:
 	case MPU6000_REV_D9:
 	case MPU6000_REV_D10:
-	case ICM20608_REV_00:
+	case ICM20608_REV_FF:
+	case ICM20689_REV_FE:
+	case ICM20689_REV_03:
+	case ICM20602_REV_02:
 	case MPU6050_REV_D8:
-		DEVICE_DEBUG("ID 0x%02x", _product);
-		_checked_values[0] = _product;
-		return OK;
+		unknown_product_id = false;
 	}
 
-	DEVICE_DEBUG("unexpected ID 0x%02x", _product);
-	return -EIO;
+	_checked_values[MPU6000_CHECKED_PRODUCT_ID_INDEX] = _product;
+
+	DEVICE_DEBUG("ID 0x%02x", _product);
+
+	if (unknown_product_id) {
+
+		PX4_WARN("unexpected ID 0x%02x %s", _product, is_icm_device() ? "accepted" : "exiting!");
+
+		if (is_mpu_device()) {
+			return -EIO;
+		}
+	}
+
+	return OK;
+
 }
 
 /*
@@ -1547,16 +1584,6 @@ MPU6000::gyro_ioctl(struct file *filp, int cmd, unsigned long arg)
 uint8_t
 MPU6000::read_reg(unsigned reg, uint32_t speed)
 {
-	/* There is no MPUREG_PRODUCT_ID on the icm device
-	 * so lets make dummy it up and allow the rest of the
-	 * code to run as is
-	 */
-
-	if (reg == MPUREG_PRODUCT_ID && is_icm_device()) {
-		return ICM20608_REV_00;
-	}
-
-
 	uint8_t buf;
 	_interface->read(MPU6000_SET_SPEED(reg, speed), &buf, 1);
 	return buf;
@@ -1608,15 +1635,17 @@ int
 MPU6000::set_accel_range(unsigned max_g_in)
 {
 	// workaround for bugged versions of MPU6k (rev C)
-	switch (_product) {
-	case MPU6000ES_REV_C4:
-	case MPU6000ES_REV_C5:
-	case MPU6000_REV_C4:
-	case MPU6000_REV_C5:
-		write_checked_reg(MPUREG_ACCEL_CONFIG, 1 << 3);
-		_accel_range_scale = (MPU6000_ONE_G / 4096.0f);
-		_accel_range_m_s2 = 8.0f * MPU6000_ONE_G;
-		return OK;
+	if (is_mpu_device()) {
+		switch (_product) {
+		case MPU6000ES_REV_C4:
+		case MPU6000ES_REV_C5:
+		case MPU6000_REV_C4:
+		case MPU6000_REV_C5:
+			write_checked_reg(MPUREG_ACCEL_CONFIG, 1 << 3);
+			_accel_range_scale = (MPU6000_ONE_G / 4096.0f);
+			_accel_range_m_s2 = 8.0f * MPU6000_ONE_G;
+			return OK;
+		}
 	}
 
 	uint8_t afs_sel;
@@ -1696,8 +1725,13 @@ MPU6000::stop()
 	memset(_last_accel, 0, sizeof(_last_accel));
 
 	/* discard unread data in the buffers */
-	_accel_reports->flush();
-	_gyro_reports->flush();
+	if (_accel_reports != nullptr) {
+		_accel_reports->flush();
+	}
+
+	if (_gyro_reports != nullptr) {
+		_gyro_reports->flush();
+	}
 }
 
 #if defined(USE_I2C)
@@ -1755,7 +1789,7 @@ MPU6000::check_registers(void)
 	uint8_t v;
 
 	// the MPUREG_ICM_UNDOC1 is specific to the ICM20608 (and undocumented)
-	if (_checked_registers[_checked_next] == MPUREG_ICM_UNDOC1 && !is_icm_device()) {
+	if ((_checked_registers[_checked_next] == MPUREG_ICM_UNDOC1 && !is_icm_device())) {
 		_checked_next = (_checked_next + 1) % MPU6000_NUM_CHECKED_REGISTERS;
 	}
 
@@ -1774,7 +1808,7 @@ MPU6000::check_registers(void)
 		  fix one per loop to prevent a bad sensor hogging the
 		  bus.
 		 */
-		if (_register_wait == 0 || _checked_next == 0) {
+		if (_register_wait == 0 || _checked_next == MPU6000_CHECKED_PRODUCT_ID_INDEX) {
 			// if the product_id is wrong then reset the
 			// sensor completely
 			write_reg(MPUREG_PWR_MGMT_1, BIT_H_RESET);
@@ -2182,29 +2216,40 @@ struct mpu6000_bus_option {
 	const char *gyropath;
 	MPU6000_constructor interface_constructor;
 	uint8_t busnum;
+	bool external;
 	MPU6000	*dev;
 } bus_options[] = {
 #if defined (USE_I2C)
 #  if defined(PX4_I2C_BUS_ONBOARD)
-	{ MPU6000_BUS_I2C_INTERNAL, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO,  &MPU6000_I2C_interface, PX4_I2C_BUS_ONBOARD, NULL },
+	{ MPU6000_BUS_I2C_INTERNAL, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO,  &MPU6000_I2C_interface, PX4_I2C_BUS_ONBOARD, false, NULL },
 #  endif
 #  if defined(PX4_I2C_BUS_EXPANSION)
-	{ MPU6000_BUS_I2C_EXTERNAL, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_I2C_interface, PX4_I2C_BUS_EXPANSION, NULL },
+	{ MPU6000_BUS_I2C_EXTERNAL, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_I2C_interface, PX4_I2C_BUS_EXPANSION,  true, NULL },
 #  endif
 #endif
 #ifdef PX4_SPIDEV_MPU
-	{ MPU6000_BUS_SPI_INTERNAL, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS, NULL },
+	{ MPU6000_BUS_SPI_INTERNAL1, MPU_DEVICE_PATH_ACCEL, MPU_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
 #endif
 #if defined(PX4_SPI_BUS_EXT)
-	{ MPU6000_BUS_SPI_EXTERNAL, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXT, NULL },
+	{ MPU6000_BUS_SPI_EXTERNAL1, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXT,  true, NULL },
+#endif
+#ifdef PX4_SPIDEV_ICM_20602
+	{ MPU6000_BUS_SPI_INTERNAL1, ICM20602_DEVICE_PATH_ACCEL, ICM20602_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
+#endif
+#ifdef PX4_SPIDEV_ICM_20689
+	{ MPU6000_BUS_SPI_INTERNAL2, ICM20689_DEVICE_PATH_ACCEL, ICM20689_DEVICE_PATH_GYRO, &MPU6000_SPI_interface, PX4_SPI_BUS_SENSORS,  false, NULL },
+#endif
+#if defined(PX4_SPI_BUS_EXTERNAL)
+	{ MPU6000_BUS_SPI_EXTERNAL1, MPU_DEVICE_PATH_ACCEL_EXT, MPU_DEVICE_PATH_GYRO_EXT, &MPU6000_SPI_interface, PX4_SPI_BUS_EXTERNAL, true,  NULL },
+	{ MPU6000_BUS_SPI_EXTERNAL2, MPU_DEVICE_PATH_ACCEL_EXT1, MPU_DEVICE_PATH_GYRO_EXT1, &MPU6000_SPI_interface, PX4_SPI_BUS_EXTERNAL, true,  NULL },
 #endif
 };
 
 #define NUM_BUS_OPTIONS (sizeof(bus_options)/sizeof(bus_options[0]))
 
 
-void	start(enum MPU6000_BUS busid, enum Rotation rotation, int range, int device_type, bool external);
-bool 	start_bus(struct mpu6000_bus_option &bus, enum Rotation rotation, int range, int device_type, bool external);
+void	start(enum MPU6000_BUS busid, enum Rotation rotation, int range, int device_type);
+bool 	start_bus(struct mpu6000_bus_option &bus, enum Rotation rotation, int range, int device_type);
 void	stop(enum MPU6000_BUS busid);
 void	test(enum MPU6000_BUS busid);
 static struct mpu6000_bus_option &find_bus(enum MPU6000_BUS busid);
@@ -2234,16 +2279,16 @@ struct mpu6000_bus_option &find_bus(enum MPU6000_BUS busid)
  * start driver for a specific bus option
  */
 bool
-start_bus(struct mpu6000_bus_option &bus, enum Rotation rotation, int range, int device_type, bool external)
+start_bus(struct mpu6000_bus_option &bus, enum Rotation rotation, int range, int device_type)
 {
 	int fd = -1;
 
 	if (bus.dev != nullptr) {
-		warnx("%s SPI not available", external ? "External" : "Internal");
+		warnx("%s SPI not available", bus.external ? "External" : "Internal");
 		return false;
 	}
 
-	device::Device *interface = bus.interface_constructor(bus.busnum, device_type, external);
+	device::Device *interface = bus.interface_constructor(bus.busnum, device_type, bus.external);
 
 	if (interface == nullptr) {
 		warnx("no device on bus %u", (unsigned)bus.busid);
@@ -2308,7 +2353,7 @@ fail:
  * or failed to detect the sensor.
  */
 void
-start(enum MPU6000_BUS busid, enum Rotation rotation, int range, int device_type, bool external)
+start(enum MPU6000_BUS busid, enum Rotation rotation, int range, int device_type)
 {
 
 	bool started = false;
@@ -2324,7 +2369,7 @@ start(enum MPU6000_BUS busid, enum Rotation rotation, int range, int device_type
 			continue;
 		}
 
-		started |= start_bus(bus_options[i], rotation, range, device_type, external);
+		started |= start_bus(bus_options[i], rotation, range, device_type);
 	}
 
 	exit(started ? 0 : 1);
@@ -2539,8 +2584,13 @@ usage()
 {
 	warnx("missing command: try 'start', 'info', 'test', 'stop',\n'reset', 'regdump', 'factorytest', 'testerror'");
 	warnx("options:");
-	warnx("    -X    (external bus)");
-	warnx("    -T 6000|20608 (default 6000)");
+	warnx("    -X external I2C bus");
+	warnx("    -I internal I2C bus");
+	warnx("    -S external SPI bus");
+	warnx("    -s internal SPI bus");
+	warnx("    -Z external1 SPI bus");
+	warnx("    -z internal2 SPI bus");
+	warnx("    -T 6000|20608|20602 (default 6000)");
 	warnx("    -R rotation");
 	warnx("    -a accel range (in g)");
 }
@@ -2553,12 +2603,11 @@ mpu6000_main(int argc, char *argv[])
 	enum MPU6000_BUS busid = MPU6000_BUS_ALL;
 	int device_type = 6000;
 	int ch;
-	bool external = false;
 	enum Rotation rotation = ROTATION_NONE;
 	int accel_range = 8;
 
 	/* jump over start/off/etc and look at options first */
-	while ((ch = getopt(argc, argv, "T:XISsR:a:")) != EOF) {
+	while ((ch = getopt(argc, argv, "T:XISsZzR:a:")) != EOF) {
 		switch (ch) {
 		case 'X':
 			busid = MPU6000_BUS_I2C_EXTERNAL;
@@ -2569,11 +2618,19 @@ mpu6000_main(int argc, char *argv[])
 			break;
 
 		case 'S':
-			busid = MPU6000_BUS_SPI_EXTERNAL;
+			busid = MPU6000_BUS_SPI_EXTERNAL1;
 			break;
 
 		case 's':
-			busid = MPU6000_BUS_SPI_INTERNAL;
+			busid = MPU6000_BUS_SPI_INTERNAL1;
+			break;
+
+		case 'Z':
+			busid = MPU6000_BUS_SPI_EXTERNAL2;
+			break;
+
+		case 'z':
+			busid = MPU6000_BUS_SPI_INTERNAL2;
 			break;
 
 		case 'T':
@@ -2594,8 +2651,6 @@ mpu6000_main(int argc, char *argv[])
 		}
 	}
 
-	external = (busid == MPU6000_BUS_I2C_EXTERNAL || busid == MPU6000_BUS_SPI_EXTERNAL);
-
 	const char *verb = argv[optind];
 
 	/*
@@ -2603,7 +2658,7 @@ mpu6000_main(int argc, char *argv[])
 
 	 */
 	if (!strcmp(verb, "start")) {
-		mpu6000::start(busid, rotation, accel_range, device_type, external);
+		mpu6000::start(busid, rotation, accel_range, device_type);
 	}
 
 	if (!strcmp(verb, "stop")) {

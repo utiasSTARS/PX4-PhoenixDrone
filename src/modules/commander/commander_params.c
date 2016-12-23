@@ -280,6 +280,20 @@ PARAM_DEFINE_INT32(COM_DISARM_LAND, 0);
 PARAM_DEFINE_INT32(COM_ARM_WO_GPS, 1);
 
 /**
+ * Arm switch is only a button
+ *
+ * The default uses the arm switch as real switch.
+ * If parameter set button gets handled like stick arming.
+ *
+ * @group Commander
+ * @min 0
+ * @max 1
+ * @value 0 Arm switch is a switch that stays on when armed
+ * @value 1 Arm switch is a button that only triggers arming and disarming
+ */
+PARAM_DEFINE_INT32(COM_ARM_SWISBTN, 0);
+
+/**
  * Battery failsafe mode
  *
  * Action the system takes on low battery. Defaults to off
@@ -472,3 +486,99 @@ PARAM_DEFINE_INT32(COM_FLTMODE5, -1);
  * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE6, -1);
+
+/**
+ * Maximum EKF position innovation test ratio that will allow arming
+ *
+ * @group Commander
+ * @unit m
+ * @min 0.1
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_EKF_POS, 0.5f);
+
+/**
+ * Maximum EKF velocity innovation test ratio that will allow arming
+ *
+ * @group Commander
+ * @unit m/s
+ * @min 0.1
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_EKF_VEL, 0.5f);
+
+/**
+ * Maximum EKF height innovation test ratio that will allow arming
+ *
+ * @group Commander
+ * @unit m
+ * @min 0.1
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_EKF_HGT, 1.0f);
+
+/**
+ * Maximum EKF yaw innovation test ratio that will allow arming
+ *
+ * @group Commander
+ * @unit rad
+ * @min 0.1
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_EKF_YAW, 0.5f);
+
+/**
+ * Maximum value of EKF accelerometer delta velocity bias estimate that will allow arming
+ *
+ * @group Commander
+ * @unit m/s
+ * @min 0.001
+ * @max 0.01
+ * @decimal 4
+ * @increment 0.0005
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_EKF_AB, 5.0e-3f);
+
+/**
+ * Maximum value of EKF gyro delta angle bias estimate that will allow arming
+ *
+ * @group Commander
+ * @unit rad
+ * @min 0.0001
+ * @max 0.0017
+ * @decimal 5
+ * @increment 0.0001
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_EKF_GB, 8.7e-4f);
+
+/**
+ * Maximum accelerometer inconsistency between IMU units that will allow arming
+ *
+ * @group Commander
+ * @unit m/s/s
+ * @min 0.1
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_IMU_ACC, 0.7f);
+
+/**
+ * Maximum rate gyro inconsistency between IMU units that will allow arming
+ *
+ * @group Commander
+ * @unit rad/s
+ * @min 0.02
+ * @max 0.2
+ * @decimal 3
+ * @increment 0.01
+ */
+PARAM_DEFINE_FLOAT(COM_ARM_IMU_GYR, 0.09f);

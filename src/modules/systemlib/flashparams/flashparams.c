@@ -30,6 +30,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
+
 /**
  * @file flashparam.c
  *
@@ -202,6 +203,7 @@ out:
 			}
 
 			free(enc_buff);
+			parameter_flashfs_free();
 		}
 	}
 
