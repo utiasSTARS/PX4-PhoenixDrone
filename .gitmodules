@@ -4,9 +4,6 @@
 [submodule "mavlink/include/mavlink/v2.0"]
 	path = mavlink/include/mavlink/v2.0
 	url = https://github.com/mavlink/c_library_v2.git
-[submodule "NuttX"]
-	path = NuttX
-	url = https://github.com/PX4/PX4NuttX.git
 [submodule "src/modules/uavcan/libuavcan"]
 	path = src/modules/uavcan/libuavcan
 	url = https://github.com/UAVCAN/libuavcan.git
@@ -41,3 +38,6 @@
 [submodule "src/drivers/gps/devices"]
 	path = src/drivers/gps/devices
 	url = https://github.com/PX4/GpsDrivers.git
+[submodule "PX4NuttX"]
+	path = NuttX
+	url = https://github.com/PX4/PX4NuttX.git
