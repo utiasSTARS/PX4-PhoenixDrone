@@ -38,6 +38,6 @@
 [submodule "src/drivers/gps/devices"]
 	path = src/drivers/gps/devices
 	url = https://github.com/PX4/GpsDrivers.git
-[submodule "PX4NuttX"]
+[submodule "NuttX"]
 	path = NuttX
 	url = https://github.com/PX4/PX4NuttX.git
