@@ -2003,18 +2003,10 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("ALTITUDE", 50.0f);
 		configure_stream("GPS_RAW_INT", 5.0f);
 		configure_stream("ADSB_VEHICLE", 2.0f);
-<<<<<<< HEAD
 		configure_stream("DISTANCE_SENSOR", 25.0f);
 		configure_stream("OPTICAL_FLOW_RAD", 25.0f);
 		//configure_stream("VISION_POSITION_NED", 1.0f);
 		configure_stream("ESTIMATOR_STATUS", 1.0f);
-=======
-		configure_stream("COLLISION", 2.0f);
-		configure_stream("DISTANCE_SENSOR", 0.5f);
-		configure_stream("OPTICAL_FLOW_RAD", 1.0f);
-		configure_stream("VISION_POSITION_NED", 1.0f);
-		configure_stream("ESTIMATOR_STATUS", 0.5f);
->>>>>>> upstream/master
 		configure_stream("NAV_CONTROLLER_OUTPUT", 1.5f);
 		configure_stream("GLOBAL_POSITION_INT", 10.0f);
 		configure_stream("LOCAL_POSITION_NED", 25.0f);
