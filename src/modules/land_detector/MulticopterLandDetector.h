@@ -81,20 +81,20 @@ private:
 		param_t maxClimbRate;
 		param_t maxVelocity;
 		param_t maxRotation;
-		param_t maxThrottle;
+		param_t minThrottle;
 		param_t minManThrottle;
-		param_t acc_threshold_m_s2;
-		param_t ff_trigger_time;
+		param_t freefall_acc_threshold;
+		param_t freefall_trigger_time;
 	} _paramHandle;
 
 	struct {
 		float maxClimbRate;
 		float maxVelocity;
 		float maxRotation_rad_s;
-		float maxThrottle;
+		float minThrottle;
 		float minManThrottle;
-		float acc_threshold_m_s2;
-		float ff_trigger_time;
+		float freefall_acc_threshold;
+		float freefall_trigger_time;
 	} _params;
 
 	int _vehicleLocalPositionSub;

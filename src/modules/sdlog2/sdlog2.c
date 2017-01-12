@@ -393,7 +393,7 @@ int sdlog2_main(int argc, char *argv[])
 		return 0;
 	}
 
-	if (!strcmp(argv[1], "on")) {
+	if (!strncmp(argv[1], "on", 2)) {
 		struct vehicle_command_s cmd;
 		cmd.command = VEHICLE_CMD_PREFLIGHT_STORAGE;
 		cmd.param1 = -1;
@@ -928,16 +928,7 @@ bool copy_if_updated_multi(orb_id_t topic, int multi_instance, int *handle, void
 	bool updated = false;
 
 	if (*handle < 0) {
-#if __PX4_POSIX_EAGLE
-		// The orb_exists call doesn't work correctly on Snapdragon yet.
-		// (No data gets sent from the QURT to the Linux side because there
-		// are no subscribers. However, there won't be any subscribers, if
-		// they check using orb_exists() before subscribing.)
-		if (true)
-#else
 		if (OK == orb_exists(topic, multi_instance))
-#endif
-
 		{
 			*handle = orb_subscribe_multi(topic, multi_instance);
 			/* copy first data */

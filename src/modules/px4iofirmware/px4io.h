@@ -57,7 +57,8 @@
 /*
  * Constants and limits.
  */
-#define PX4IO_SERVO_COUNT		8
+#define PX4IO_BL_VERSION			3
+#define PX4IO_SERVO_COUNT			8
 #define PX4IO_CONTROL_CHANNELS		8
 #define PX4IO_CONTROL_GROUPS		4
 #define PX4IO_RC_INPUT_CHANNELS		18
@@ -77,15 +78,16 @@
 /*
  * Registers.
  */
-extern uint16_t			r_page_status[];	/* PX4IO_PAGE_STATUS */
+extern volatile uint16_t	r_page_status[];	/* PX4IO_PAGE_STATUS */
 extern uint16_t			r_page_actuators[];	/* PX4IO_PAGE_ACTUATORS */
 extern uint16_t			r_page_servos[];	/* PX4IO_PAGE_SERVOS */
+extern uint16_t			r_page_direct_pwm[];	/* PX4IO_PAGE_DIRECT_PWM */
 extern uint16_t			r_page_raw_rc_input[];	/* PX4IO_PAGE_RAW_RC_INPUT */
 extern uint16_t			r_page_rc_input[];	/* PX4IO_PAGE_RC_INPUT */
 extern uint16_t			r_page_adc[];		/* PX4IO_PAGE_RAW_ADC_INPUT */
 
 extern volatile uint16_t	r_page_setup[];		/* PX4IO_PAGE_SETUP */
-extern volatile uint16_t	r_page_controls[];	/* PX4IO_PAGE_CONTROLS */
+extern uint16_t			r_page_controls[];	/* PX4IO_PAGE_CONTROLS */
 extern uint16_t			r_page_rc_input_config[]; /* PX4IO_PAGE_RC_INPUT_CONFIG */
 extern uint16_t			r_page_servo_failsafe[]; /* PX4IO_PAGE_FAILSAFE_PWM */
 extern uint16_t			r_page_servo_control_min[]; /* PX4IO_PAGE_CONTROL_MIN_PWM */

@@ -87,8 +87,14 @@
 #include "mavlink_receiver.h"
 #include "mavlink_rate_limiter.h"
 
+// Guard against MAVLink misconfiguration
 #ifndef MAVLINK_CRC_EXTRA
 #error MAVLINK_CRC_EXTRA has to be defined on PX4 systems
+#endif
+
+// Guard against flow control misconfiguration
+#if defined (CRTSCTS) && defined (__PX4_NUTTX) && (CRTSCTS != (CRTS_IFLOW | CCTS_OFLOW))
+#error The non-standard CRTSCTS define is incorrect. Fix this in the OS or replace with (CRTS_IFLOW | CCTS_OFLOW)
 #endif
 
 #define DEFAULT_REMOTE_PORT_UDP			14550 ///< GCS port per MAVLink spec
@@ -707,10 +713,12 @@ int Mavlink::mavlink_open_uart(int baud, const char *uart_name)
 	case 1000000: speed = B1000000; break;
 
 #ifdef B1500000
+
 	case 1500000: speed = B1500000; break;
 #endif
 
 #ifdef B3000000
+
 	case 3000000: speed = B3000000; break;
 #endif
 
@@ -841,18 +849,11 @@ Mavlink::enable_flow_control(bool enabled)
 	int ret = tcgetattr(_uart_fd, &uart_config);
 
 	if (enabled) {
-#ifdef CRTS_IFLOW
-		uart_config.c_cflag |= CRTS_IFLOW;
-#else
 		uart_config.c_cflag |= CRTSCTS;
-#endif
 
 	} else {
-#ifdef CRTS_IFLOW
-		uart_config.c_cflag &= ~CRTS_IFLOW;
-#else
 		uart_config.c_cflag &= ~CRTSCTS;
-#endif
+
 	}
 
 	ret = tcsetattr(_uart_fd, TCSANOW, &uart_config);
@@ -917,7 +918,6 @@ Mavlink::get_free_tx_buf()
 			if (_last_write_try_time != 0 &&
 			    hrt_elapsed_time(&_last_write_success_time) > 500 * 1000UL &&
 			    _last_write_success_time != _last_write_try_time) {
-				warnx("Disabling hardware flow control");
 				enable_flow_control(false);
 			}
 		}
@@ -1632,6 +1632,7 @@ Mavlink::update_rate_mult()
 	}
 
 	float mavlink_ulog_streaming_rate_inv = 1.0f;
+
 	if (_mavlink_ulog) {
 		mavlink_ulog_streaming_rate_inv = 1.f - _mavlink_ulog->current_data_rate();
 	}
@@ -2021,8 +2022,8 @@ Mavlink::task_main(int argc, char *argv[])
 		break;
 
 	case MAVLINK_MODE_ONBOARD:
-		configure_stream("SYS_STATUS", 1.0f);
-		configure_stream("EXTENDED_SYS_STATE", 2.0f);
+		configure_stream("SYS_STATUS", 5.0f);
+		configure_stream("EXTENDED_SYS_STATE", 5.0f);
 		configure_stream("HIGHRES_IMU", 50.0f);
 		configure_stream("ATTITUDE", 250.0f);
 		configure_stream("RC_CHANNELS", 20.0f);
@@ -2230,6 +2231,7 @@ Mavlink::task_main(int argc, char *argv[])
 
 		/* send command ACK */
 		uint16_t current_command_ack = 0;
+
 		if (ack_sub->update(&ack_time, &command_ack)) {
 			mavlink_command_ack_t msg;
 			msg.result = command_ack.result;
@@ -2262,15 +2264,19 @@ Mavlink::task_main(int argc, char *argv[])
 				_mavlink_ulog->stop();
 				_mavlink_ulog = nullptr;
 				_mavlink_ulog_stop_requested = false;
+
 			} else {
 				if (current_command_ack == vehicle_command_s::VEHICLE_CMD_LOGGING_START) {
 					_mavlink_ulog->start_ack_received();
 				}
+
 				int ret = _mavlink_ulog->handle_update(get_channel());
+
 				if (ret < 0) { //abort the streaming on error
 					if (ret != -1) {
 						PX4_WARN("mavlink ulog stream update failed, stopping (%i)", ret);
 					}
+
 					_mavlink_ulog->stop();
 					_mavlink_ulog = nullptr;
 				}
@@ -2564,14 +2570,17 @@ Mavlink::display_status()
 	printf("\ttxerr: %.3f kB/s\n", (double)_rate_txerr);
 	printf("\trx: %.3f kB/s\n", (double)_rate_rx);
 	printf("\trate mult: %.3f\n", (double)_rate_mult);
+
 	if (_mavlink_ulog) {
-		printf("\tULog rate: %.1f%% of max %.1f%%\n", (double)_mavlink_ulog->current_data_rate()*100.,
-				(double)_mavlink_ulog->maximum_data_rate()*100.);
+		printf("\tULog rate: %.1f%% of max %.1f%%\n", (double)_mavlink_ulog->current_data_rate() * 100.,
+		       (double)_mavlink_ulog->maximum_data_rate() * 100.);
 	}
+
 	printf("\taccepting commands: %s\n", (accepting_commands()) ? "YES" : "NO");
 	printf("\tMAVLink version: %i\n", _protocol_version);
 
 	printf("\ttransport protocol: ");
+
 	switch (_protocol) {
 	case UDP:
 		printf("UDP (%i)\n", _network_port);

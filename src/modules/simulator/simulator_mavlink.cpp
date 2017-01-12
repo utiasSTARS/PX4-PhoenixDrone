@@ -1,6 +1,7 @@
 /****************************************************************************
  *
  *   Copyright (c) 2015 Mark Charlebois. All rights reserved.
+ *   Copyright (c) 2016 Anton Matosov. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,22 +34,31 @@
 #include <termios.h>
 #include <px4_log.h>
 #include <px4_time.h>
+#include <px4_tasks.h>
 #include "simulator.h"
+#include <simulator_config.h>
 #include "errno.h"
 #include <geo/geo.h>
 #include <drivers/drv_pwm_output.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <pthread.h>
-
+#include <conversion/rotation.h>
 #include <mathlib/mathlib.h>
 
 extern "C" __EXPORT hrt_abstime hrt_reset(void);
 
 #define SEND_INTERVAL 	20
 #define UDP_PORT 	14560
-#define PIXHAWK_DEVICE "/dev/ttyACM0"
 
+#define PRESS_GROUND 101325.0f
+#define DENSITY 1.2041f
+
+static const uint8_t mavlink_message_lengths[256] = MAVLINK_MESSAGE_LENGTHS;
+static const uint8_t mavlink_message_crcs[256] = MAVLINK_MESSAGE_CRCS;
+static const float mg2ms2 = CONSTANTS_ONE_G / 1000.0f;
+
+#ifdef ENABLE_UART_RC_INPUT
 #ifndef B460800
 #define B460800 460800
 #endif
@@ -57,12 +67,8 @@ extern "C" __EXPORT hrt_abstime hrt_reset(void);
 #define B921600 921600
 #endif
 
-#define PRESS_GROUND 101325.0f
-#define DENSITY 1.2041f
-
-static const uint8_t mavlink_message_lengths[256] = MAVLINK_MESSAGE_LENGTHS;
-static const uint8_t mavlink_message_crcs[256] = MAVLINK_MESSAGE_CRCS;
-static const float mg2ms2 = CONSTANTS_ONE_G / 1000.0f;
+static int openUart(const char *uart_name, int baud);
+#endif
 
 static int _fd;
 static unsigned char _buf[1024];
@@ -113,7 +119,8 @@ void Simulator::pack_actuator_message(mavlink_hil_actuator_controls_t &msg, unsi
 			break;
 
 		case MAV_TYPE_VTOL_RESERVED2:
-			n = 8;
+			// this is the standard VTOL / quad plane with 5 propellers
+			n = 5;
 			break;
 
 		default:
@@ -656,6 +663,25 @@ void Simulator::pollForMAVLinkMessages(bool publish, int udp_port)
 	fds[0].fd = _fd;
 	fds[0].events = POLLIN;
 
+#ifdef ENABLE_UART_RC_INPUT
+	// setup serial connection to autopilot (used to get manual controls)
+	int serial_fd = openUart(PIXHAWK_DEVICE, PIXHAWK_DEVICE_BAUD);
+
+	char serial_buf[1024];
+
+	if (serial_fd >= 0) {
+		fds[1].fd = serial_fd;
+		fds[1].events = POLLIN;
+		fd_count++;
+
+		PX4_INFO("Start using %s for radio control input.", PIXHAWK_DEVICE);
+
+	} else {
+		PX4_INFO("Not using %s for radio control input. Assuming joystick input via MAVLink.", PIXHAWK_DEVICE);
+	}
+
+#endif
+
 	int len = 0;
 
 	// wait for first data from simulator and respond with first controls
@@ -781,8 +807,130 @@ void Simulator::pollForMAVLinkMessages(bool publish, int udp_port)
 				}
 			}
 		}
+
+#ifdef ENABLE_UART_RC_INPUT
+
+		// got data from PIXHAWK
+		if (fd_count > 1 && fds[1].revents & POLLIN) {
+			len = ::read(serial_fd, serial_buf, sizeof(serial_buf));
+
+			if (len > 0) {
+				mavlink_message_t msg;
+
+				mavlink_status_t serial_status = {};
+
+				for (int i = 0; i < len; ++i) {
+					if (mavlink_parse_char(MAVLINK_COMM_1, serial_buf[i], &msg, &serial_status)) {
+						// have a message, handle it
+						handle_message(&msg, true);
+					}
+				}
+			}
+		}
+
+#endif
 	}
 }
+
+
+#ifdef ENABLE_UART_RC_INPUT
+int openUart(const char *uart_name, int baud)
+{
+	/* process baud rate */
+	int speed;
+
+	switch (baud) {
+	case 0:      speed = B0;      break;
+
+	case 50:     speed = B50;     break;
+
+	case 75:     speed = B75;     break;
+
+	case 110:    speed = B110;    break;
+
+	case 134:    speed = B134;    break;
+
+	case 150:    speed = B150;    break;
+
+	case 200:    speed = B200;    break;
+
+	case 300:    speed = B300;    break;
+
+	case 600:    speed = B600;    break;
+
+	case 1200:   speed = B1200;   break;
+
+	case 1800:   speed = B1800;   break;
+
+	case 2400:   speed = B2400;   break;
+
+	case 4800:   speed = B4800;   break;
+
+	case 9600:   speed = B9600;   break;
+
+	case 19200:  speed = B19200;  break;
+
+	case 38400:  speed = B38400;  break;
+
+	case 57600:  speed = B57600;  break;
+
+	case 115200: speed = B115200; break;
+
+	case 230400: speed = B230400; break;
+
+	case 460800: speed = B460800; break;
+
+	case 921600: speed = B921600; break;
+
+	default:
+		warnx("ERROR: Unsupported baudrate: %d\n\tsupported examples:\n\t9600, 19200, 38400, 57600\t\n115200\n230400\n460800\n921600\n",
+		      baud);
+		return -EINVAL;
+	}
+
+	/* open uart */
+	int uart_fd = ::open(uart_name, O_RDWR | O_NOCTTY);
+
+	if (uart_fd < 0) {
+		return uart_fd;
+	}
+
+
+	/* Try to set baud rate */
+	struct termios uart_config;
+	memset(&uart_config, 0, sizeof(uart_config));
+
+	int termios_state;
+
+	/* Back up the original uart configuration to restore it after exit */
+	if ((termios_state = tcgetattr(uart_fd, &uart_config)) < 0) {
+		warnx("ERR GET CONF %s: %d\n", uart_name, termios_state);
+		::close(uart_fd);
+		return -1;
+	}
+
+	/* Fill the struct for the new configuration */
+	tcgetattr(uart_fd, &uart_config);
+
+	/* Set baud rate */
+	if (cfsetispeed(&uart_config, speed) < 0 || cfsetospeed(&uart_config, speed) < 0) {
+		warnx("ERR SET BAUD %s: %d\n", uart_name, termios_state);
+		::close(uart_fd);
+		return -1;
+	}
+
+	// Make raw
+	cfmakeraw(&uart_config);
+
+	if ((termios_state = tcsetattr(uart_fd, TCSANOW, &uart_config)) < 0) {
+		warnx("ERR SET CONF %s\n", uart_name);
+		::close(uart_fd);
+		return -1;
+	}
+
+	return uart_fd;
+}
+#endif
 
 int Simulator::publish_sensor_topics(mavlink_hil_sensor_t *imu)
 {
@@ -898,6 +1046,14 @@ int Simulator::publish_flow_topic(mavlink_hil_optical_flow_t *flow_mavlink)
 	flow.pixel_flow_x_integral = flow_mavlink->integrated_x;
 	flow.pixel_flow_y_integral = flow_mavlink->integrated_y;
 	flow.quality = flow_mavlink->quality;
+
+	/* rotate measurements according to parameter */
+	enum Rotation flow_rot;
+	param_get(param_find("SENS_FLOW_ROT"), &flow_rot);
+
+	float zeroval = 0.0f;
+	rotate_3f(flow_rot, flow.pixel_flow_x_integral, flow.pixel_flow_y_integral, zeroval);
+	rotate_3f(flow_rot, flow.gyro_x_rate_integral, flow.gyro_y_rate_integral, flow.gyro_z_rate_integral);
 
 	int flow_multi;
 	orb_publish_auto(ORB_ID(optical_flow), &_flow_pub, &flow, &flow_multi, ORB_PRIO_HIGH);

@@ -52,9 +52,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <px4_config.h>
+#include <px4_tasks.h>
 #include <drivers/drv_hrt.h>
 #include <drivers/device/device.h>
-#include <systemlib/systemlib.h>
 #include <drivers/drv_gps.h>
 #include <uORB/uORB.h>
 #include <uORB/topics/vehicle_gps_position.h>
@@ -195,6 +195,8 @@ GPSSIM::GPSSIM(const char *uart_path, bool fake_gps, bool enable_sat_info) :
 
 GPSSIM::~GPSSIM()
 {
+	delete _Sat_Info;
+
 	/* tell the task we want it to go away */
 	_task_should_exit = true;
 

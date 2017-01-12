@@ -48,9 +48,6 @@
 // Uncomment the line below to get better debug output. Never commit with this left on.
 //#define MAVLINK_FTP_DEBUG
 
-int buf_size_1 = 0;
-int buf_size_2 = 0;
-
 MavlinkFTP::MavlinkFTP(Mavlink *mavlink) :
 	MavlinkStream(mavlink),
 	_session_info{},
@@ -306,6 +303,8 @@ MavlinkFTP::_workList(PayloadHeader *payload, bool list_hidden)
 {
 	char dirPath[kMaxDataLength];
 	strncpy(dirPath, _data_as_cstring(payload), kMaxDataLength);
+	// ensure termination
+	dirPath[sizeof(dirPath) - 1] = '\0';
 
 	ErrorCode errorCode = kErrNone;
 	unsigned offset = 0;
@@ -421,7 +420,7 @@ MavlinkFTP::_workList(PayloadHeader *payload, bool list_hidden)
 		} else {
 			// Everything else just sends name
 			strncpy(buf, result->d_name, sizeof(buf));
-			buf[sizeof(buf) - 1] = 0;
+			buf[sizeof(buf) - 1] = '\0';
 		}
 
 		size_t nameLen = strlen(buf);
@@ -585,6 +584,8 @@ MavlinkFTP::_workRemoveFile(PayloadHeader *payload)
 {
 	char file[kMaxDataLength];
 	strncpy(file, _data_as_cstring(payload), kMaxDataLength);
+	// ensure termination
+	file[sizeof(file) - 1] = '\0';
 
 	if (unlink(file) == 0) {
 		payload->size = 0;
@@ -602,6 +603,8 @@ MavlinkFTP::_workTruncateFile(PayloadHeader *payload)
 	char file[kMaxDataLength];
 	const char temp_file[] = PX4_ROOTFSDIR"/fs/microsd/.trunc.tmp";
 	strncpy(file, _data_as_cstring(payload), kMaxDataLength);
+	// ensure termination
+	file[sizeof(file) - 1] = '\0';
 	payload->size = 0;
 
 	// emulate truncate(file, payload->offset) by
@@ -724,7 +727,11 @@ MavlinkFTP::_workRename(PayloadHeader *payload)
 	}
 
 	strncpy(oldpath, ptr, kMaxDataLength);
+	// ensure termination
+	oldpath[sizeof(oldpath) - 1] = '\0';
 	strncpy(newpath, ptr + oldpath_sz + 1, kMaxDataLength);
+	// ensure termination
+	newpath[sizeof(newpath) - 1] = '\0';
 
 	if (rename(oldpath, newpath) == 0) {
 		payload->size = 0;
@@ -741,6 +748,8 @@ MavlinkFTP::_workRemoveDirectory(PayloadHeader *payload)
 {
 	char dir[kMaxDataLength];
 	strncpy(dir, _data_as_cstring(payload), kMaxDataLength);
+	// ensure termination
+	dir[sizeof(dir) - 1] = '\0';
 
 	if (rmdir(dir) == 0) {
 		payload->size = 0;
@@ -757,6 +766,8 @@ MavlinkFTP::_workCreateDirectory(PayloadHeader *payload)
 {
 	char dir[kMaxDataLength];
 	strncpy(dir, _data_as_cstring(payload), kMaxDataLength);
+	// ensure termination
+	dir[sizeof(dir) - 1] = '\0';
 
 	if (mkdir(dir, S_IRWXU | S_IRWXG | S_IRWXO) == 0) {
 		payload->size = 0;
@@ -775,6 +786,8 @@ MavlinkFTP::_workCalcFileCRC32(PayloadHeader *payload)
 	uint32_t checksum = 0;
 	ssize_t bytes_read;
 	strncpy(file_buf, _data_as_cstring(payload), kMaxDataLength);
+	// ensure termination
+	file_buf[sizeof(file_buf) - 1] = '\0';
 
 	int fd = ::open(file_buf, O_RDONLY);
 

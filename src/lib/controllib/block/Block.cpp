@@ -66,16 +66,20 @@ void Block::getName(char *buf, size_t n)
 {
 	if (getParent() == NULL) {
 		strncpy(buf, _name, n);
+		// ensure string is terminated
+		buf[n - 1] = '\0';
 
 	} else {
 		char parentName[blockNameLengthMax];
 		getParent()->getName(parentName, n);
 
 		if (!strcmp(_name, "")) {
-			strncpy(buf, parentName, blockNameLengthMax);
+			strncpy(buf, parentName, n);
+			// ensure string is terminated
+			buf[n - 1] = '\0';
 
 		} else {
-			snprintf(buf, blockNameLengthMax, "%s_%s", parentName, _name);
+			snprintf(buf, n, "%s_%s", parentName, _name);
 		}
 	}
 }
@@ -143,8 +147,8 @@ void SuperBlock::setDt(float dt)
 
 	while (child != NULL) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
@@ -161,8 +165,8 @@ void SuperBlock::updateChildParams()
 
 	while (child != NULL) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
@@ -179,8 +183,8 @@ void SuperBlock::updateChildSubscriptions()
 
 	while (child != NULL) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
@@ -197,8 +201,8 @@ void SuperBlock::updateChildPublications()
 
 	while (child != NULL) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}

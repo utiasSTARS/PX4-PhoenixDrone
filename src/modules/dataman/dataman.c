@@ -44,12 +44,12 @@
 #include <px4_config.h>
 #include <px4_defines.h>
 #include <px4_posix.h>
+#include <px4_tasks.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <systemlib/systemlib.h>
 #include <systemlib/err.h>
 #include <queue.h>
 #include <string.h>
@@ -453,10 +453,11 @@ _file_write(dm_item_t item, unsigned char index, dm_persitence_t persistence, co
 	len = -1;
 
 	/* Seek to the right spot in the data manager file and write the data item */
-	if (lseek(g_task_fd, offset, SEEK_SET) == offset)
+	if (lseek(g_task_fd, offset, SEEK_SET) == offset) {
 		if ((len = write(g_task_fd, buffer, count)) == count) {
 			fsync(g_task_fd);        /* Make sure data is written to physical media */
 		}
+	}
 
 	/* Make sure the write succeeded */
 	if (len != count) {
@@ -1025,11 +1026,11 @@ task_main(int argc, char *argv[])
 	 */
 	g_on_disk = on_disk;
 
-	if (g_on_disk) {
+	if (g_on_disk && sys_restart_val != DM_INIT_REASON_POWER_ON) {
 		PX4_INFO("%s, data manager file '%s' size is %d bytes",
 			 restart_type_str, k_data_manager_device_path, max_offset);
 
-	} else {
+	} else if (!g_on_disk) {
 		PX4_INFO("%s, data manager RAM size is %d bytes",
 			 restart_type_str, max_offset);
 	}
@@ -1275,5 +1276,5 @@ dataman_main(int argc, char *argv[])
 		return -1;
 	}
 
-	return 1;
+	return 0;
 }

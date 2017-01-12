@@ -10,14 +10,16 @@ endif()
 project(px4_unittests)
 enable_testing()
 
+message(STATUS ${CONFIG})
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -std=gnu99 -g")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=gnu++0x -g -fno-exceptions -fno-rtti -fno-threadsafe-statics -DCONFIG_WCHAR_BUILTIN -D__CUSTOM_FILE_IO__")
 
 # code coverage
 if ($ENV{PX4_CODE_COVERAGE} MATCHES "1")
 	message(STATUS "Code coverage build flags enabled")
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage --coverage")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage --coverage")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g3 -fprofile-arcs -ftest-coverage --coverage")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g3 -fprofile-arcs -ftest-coverage --coverage")
 endif()
 
 if (NOT PX4_SOURCE_DIR)
@@ -90,7 +92,7 @@ function(add_gtest)
 		else()
 			target_link_libraries(${test_name} gtest_main pthread rt ${PX4_PLATFORM})
 		endif()
-		add_test(NAME ${test_name} COMMAND ${test_name} WORKING_DIRECTORY ${PX4_SOURCE_DIR})
+		add_test(NAME ${test_name} COMMAND ${test_name} --gtest_output=xml WORKING_DIRECTORY ${PX4_BINARY_DIR})
 		add_dependencies(check ${test_name})
 	endforeach()
 endfunction()

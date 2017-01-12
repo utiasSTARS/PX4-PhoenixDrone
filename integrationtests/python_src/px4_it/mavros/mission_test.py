@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 #***************************************************************************
 #
-#   Copyright (c) 2015 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2015-2016 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -48,10 +48,14 @@ import rosbag
 import sys
 import os
 import time
+import glob
+import json
 
 import mavros
 from pymavlink import mavutil
 from mavros import mavlink
+
+import px4tools
 
 from geometry_msgs.msg import PoseStamped
 from mavros_msgs.srv import CommandLong, WaypointPush
@@ -59,6 +63,35 @@ from mavros_msgs.msg import Mavlink, Waypoint, ExtendedState
 from sensor_msgs.msg import NavSatFix
 from mavros.mission import QGroundControlWP
 #from px4_test_helper import PX4TestHelper
+
+def get_last_log():
+    try:
+        log_path = os.environ['PX4_LOG_DIR']
+    except KeyError:
+        log_path = os.path.join(os.environ['HOME'], 'ros/rootfs/fs/microsd/log')
+    last_log_dir = sorted(
+        glob.glob(os.path.join(log_path, '*')))[-1]
+    last_log = sorted(glob.glob(os.path.join(last_log_dir, '*.ulg')))[-1]
+    return last_log
+
+def read_new_mission(f):
+    d = json.load(f)
+    current = True
+    for wp in d['items']:
+        yield Waypoint(
+                is_current = current,
+                frame = int(wp['frame']),
+                command = int(wp['command']),
+                param1 = float(wp['param1']),
+                param2 = float(wp['param2']),
+                param3 = float(wp['param3']),
+                param4 = float(wp['param4']),
+                x_lat = float(wp['coordinate'][0]),
+                y_long = float(wp['coordinate'][1]),
+                z_alt = float(wp['coordinate'][2]),
+                autocontinue = bool(wp['autoContinue']))
+        if current:
+            current = False
 
 class MavrosMissionTest(unittest.TestCase):
     """
@@ -107,11 +140,17 @@ class MavrosMissionTest(unittest.TestCase):
         self.global_position = data
 
         if not self.has_global_pos:
-            self.home_alt = data.altitude
-            self.has_global_pos = True
+            if data.altitude != 0:
+                self.home_alt = data.altitude
+                self.has_global_pos = True
 
     def extended_state_callback(self, data):
+
+        prev_state = self.extended_state.vtol_state;
+
         self.extended_state = data
+        if (prev_state != self.extended_state.vtol_state):
+            print("VTOL state change: %d" % self.extended_state.vtol_state);
 
     #
     # Helper methods
@@ -148,7 +187,7 @@ class MavrosMissionTest(unittest.TestCase):
         self.last_pos_d = 9999
 
         rospy.loginfo("trying to reach waypoint " +
-            "lat: %f, lon: %f, alt: %f, timeout: %d, index: %d" %
+            "lat: %13.9f, lon: %13.9f, alt: %6.2f, timeout: %d, index: %d" %
             (lat, lon, alt, timeout, index))
 
         # does it reach the position in X seconds?
@@ -174,9 +213,20 @@ class MavrosMissionTest(unittest.TestCase):
             count = count + 1
             self.rate.sleep()
 
+        vtol_state_string = "VTOL undefined"
+
+        if (self.extended_state.vtol_state == ExtendedState.VTOL_STATE_MC):
+            vtol_state_string = "VTOL MC"
+        if (self.extended_state.vtol_state == ExtendedState.VTOL_STATE_FW):
+            vtol_state_string = "VTOL FW"
+        if (self.extended_state.vtol_state == ExtendedState.VTOL_STATE_TRANSITION_TO_MC):
+            vtol_state_string = "VTOL FW->MC"
+        if (self.extended_state.vtol_state == ExtendedState.VTOL_STATE_TRANSITION_TO_FW):
+            vtol_state_string = "VTOL MC->FW"
+
         self.assertTrue(count < timeout, (("(%s) took too long to get to position " +
-            "lat: %f, lon: %f, alt: %f, xy off: %f, z off: %f, timeout: %d, index: %d, pos_d: %f, alt_d: %f") %
-            (self.mission_name, lat, lon, alt, xy_radius, z_radius, timeout, index, self.last_pos_d, self.last_alt_d)))
+            "lat: %13.9f, lon: %13.9f, alt: %6.2f, xy off: %f, z off: %f, timeout: %d, index: %d, pos_d: %f, alt_d: %f, VTOL state: %s") %
+            (self.mission_name, lat, lon, alt, xy_radius, z_radius, timeout, index, self.last_pos_d, self.last_alt_d, vtol_state_string)))
 
     def run_mission(self):
         """switch mode: auto and arm"""
@@ -259,11 +309,23 @@ class MavrosMissionTest(unittest.TestCase):
         mission_file = os.path.dirname(os.path.realpath(__file__)) + "/" + sys.argv[1]
 
         rospy.loginfo("reading mission %s", mission_file)
-        mission = QGroundControlWP()
         wps = []
-        for waypoint in mission.read(open(mission_file, 'r')):
-            wps.append(waypoint)
-            rospy.logdebug(waypoint)
+
+        with open(mission_file, 'r') as f:
+            mission_ext = os.path.splitext(mission_file)[1]
+            if mission_ext == '.mission':
+                rospy.loginfo("new style mission fiel detected")
+                for waypoint in read_new_mission(f):
+                    wps.append(waypoint)
+                    rospy.logdebug(waypoint)
+            elif mission_ext == '.txt':
+                rospy.loginfo("old style mission fiel detected")
+                mission = QGroundControlWP()
+                for waypoint in mission.read(f):
+                    wps.append(waypoint)
+                    rospy.logdebug(waypoint)
+            else:
+                raise IOError('unknown mission file extension', mission_ext)
 
         rospy.loginfo("wait until ready")
         self.wait_until_ready()
@@ -283,6 +345,7 @@ class MavrosMissionTest(unittest.TestCase):
                 alt = waypoint.z_alt
                 if waypoint.frame == Waypoint.FRAME_GLOBAL_REL_ALT:
                     alt += self.home_alt
+
                 self.reach_position(waypoint.x_lat, waypoint.y_long, alt, 600, index)
 
             # check if VTOL transition happens if applicable
@@ -303,6 +366,19 @@ class MavrosMissionTest(unittest.TestCase):
 
             index += 1
 
+        rospy.loginfo("mission done, calculating performance metrics")
+        last_log = get_last_log()
+        rospy.loginfo("log file %s", last_log)
+        data = px4tools.ulog.read_ulog(last_log).resample_and_concat(0.1)
+        res = px4tools.estimator_analysis(data, False)
+
+        # enforce performance
+        self.assertTrue(abs(res['roll_error_mean'])  < 5.0, str(res))
+        self.assertTrue(abs(res['pitch_error_mean']) < 5.0, str(res))
+        self.assertTrue(abs(res['yaw_error_mean']) < 5.0, str(res))
+        self.assertTrue(res['roll_error_std'] < 5.0, str(res))
+        self.assertTrue(res['pitch_error_std'] < 5.0, str(res))
+        self.assertTrue(res['yaw_error_std'] < 5.0, str(res))
 
 if __name__ == '__main__':
     import rostest

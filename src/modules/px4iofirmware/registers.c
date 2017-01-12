@@ -69,8 +69,8 @@ static const uint16_t	r_page_config[] = {
 #else
 	[PX4IO_P_CONFIG_HARDWARE_VERSION]	= 1,
 #endif
-	[PX4IO_P_CONFIG_BOOTLOADER_VERSION]	= 3,	/* XXX hardcoded magic number */
-	[PX4IO_P_CONFIG_MAX_TRANSFER]		= 64,	/* XXX hardcoded magic number */
+	[PX4IO_P_CONFIG_BOOTLOADER_VERSION]	= PX4IO_BL_VERSION,
+	[PX4IO_P_CONFIG_MAX_TRANSFER]		= PX4IO_MAX_TRANSFER_LEN,
 	[PX4IO_P_CONFIG_CONTROL_COUNT]		= PX4IO_CONTROL_CHANNELS,
 	[PX4IO_P_CONFIG_ACTUATOR_COUNT]		= PX4IO_SERVO_COUNT,
 	[PX4IO_P_CONFIG_RC_INPUT_COUNT]		= PX4IO_RC_INPUT_CHANNELS,
@@ -83,7 +83,7 @@ static const uint16_t	r_page_config[] = {
  *
  * Status values.
  */
-uint16_t		r_page_status[] = {
+volatile uint16_t	r_page_status[] = {
 	[PX4IO_P_STATUS_FREEMEM]		= 0,
 	[PX4IO_P_STATUS_CPULOAD]		= 0,
 	[PX4IO_P_STATUS_FLAGS]			= 0,
@@ -142,6 +142,13 @@ uint16_t		r_page_rc_input[] = {
  * PAGE 7 PWM rate maps.
  */
 uint16_t		r_page_scratch[32];
+
+/**
+ * PAGE 8
+ *
+ * RAW PWM values
+ */
+uint16_t		r_page_direct_pwm[PX4IO_SERVO_COUNT];
 
 /**
  * PAGE 100
@@ -214,7 +221,7 @@ volatile uint16_t	r_page_setup[] = {
  *
  * Control values from the FMU.
  */
-volatile uint16_t	r_page_controls[PX4IO_CONTROL_GROUPS * PX4IO_CONTROL_CHANNELS];
+uint16_t	r_page_controls[PX4IO_CONTROL_GROUPS * PX4IO_CONTROL_CHANNELS];
 
 /*
  * PAGE 102 does not have a buffer.
@@ -307,7 +314,7 @@ registers_set(uint8_t page, uint8_t offset, const uint16_t *values, unsigned num
 
 			/* XXX range-check value? */
 			if (*values != PWM_IGNORE_THIS_CHANNEL) {
-				r_page_servos[offset] = *values;
+				r_page_direct_pwm[offset] = *values;
 			}
 
 			offset++;
@@ -1011,7 +1018,7 @@ registers_get(uint8_t page, uint8_t offset, uint16_t **values, unsigned *num_val
 		break;
 
 	case PX4IO_PAGE_DIRECT_PWM:
-		SELECT_PAGE(r_page_servos);
+		SELECT_PAGE(r_page_direct_pwm);
 		break;
 
 	case PX4IO_PAGE_FAILSAFE_PWM:

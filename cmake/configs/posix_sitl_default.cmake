@@ -88,7 +88,7 @@ set(config_module_list
 	modules/commander/commander_tests
 	modules/mc_pos_control/mc_pos_control_tests
 	modules/controllib_test
-	#modules/mavlink/mavlink_tests #TODO: fix mavlink_tests
+	modules/mavlink/mavlink_tests
 	modules/unit_test
 	modules/uORB/uORB_tests
 	systemcmds/tests
@@ -104,7 +104,7 @@ set(config_extra_builtin_cmds
 # for the config posix_sitl_efk2 and set again, explicitly, for posix_sitl_lpe,
 # which are based on posix_sitl_default.
 set(config_sitl_rcS_dir
-	posix-configs/SITL/init/ekf2
+	posix-configs/SITL/init/lpe
 	CACHE INTERNAL "init script dir for sitl"
 	)
 

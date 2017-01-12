@@ -172,10 +172,11 @@ public:
 		BROADCAST_MODE_ON
 	};
 
-	static const char *mavlink_mode_str(enum MAVLINK_MODE mode) {
+	static const char *mavlink_mode_str(enum MAVLINK_MODE mode)
+	{
 		switch (mode) {
 		case MAVLINK_MODE_NORMAL:
-				return "Normal";
+			return "Normal";
 
 		case MAVLINK_MODE_CUSTOM:
 			return "Custom";
@@ -428,8 +429,10 @@ public:
 
 	void			set_logging_enabled(bool logging) { _logging_enabled = logging; }
 
-	int			get_data_rate() { return _datarate; }
+	int				get_data_rate() { return _datarate; }
 	void			set_data_rate(int rate) { if (rate > 0) { _datarate = rate; } }
+
+	uint64_t		get_main_loop_delay() { return _main_loop_delay; }
 
 	/** get the Mavlink shell. Create a new one if there isn't one. It is *always* created via MavlinkReceiver thread.
 	 *  Returns nullptr if shell cannot be created */
@@ -439,12 +442,14 @@ public:
 
 	/** get ulog streaming if active, nullptr otherwise */
 	MavlinkULog		*get_ulog_streaming() { return _mavlink_ulog; }
-	void			try_start_ulog_streaming(uint8_t target_system, uint8_t target_component) {
+	void			try_start_ulog_streaming(uint8_t target_system, uint8_t target_component)
+	{
 		if (_mavlink_ulog) { return; }
 
 		_mavlink_ulog = MavlinkULog::try_start(_datarate, 0.7f, target_system, target_component);
 	}
-	void			request_stop_ulog_streaming() {
+	void			request_stop_ulog_streaming()
+	{
 		if (_mavlink_ulog) { _mavlink_ulog_stop_requested = true; }
 	}
 

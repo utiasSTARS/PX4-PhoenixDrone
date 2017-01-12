@@ -60,14 +60,17 @@ struct Params {
 	int vtol_type;
 	int elevons_mc_lock;		// lock elevons in multicopter mode
 	float fw_min_alt;			// minimum relative altitude for FW mode (QuadChute)
+	float front_trans_time_openloop;
+	float front_trans_time_min;
 };
 
+// Has to match 1:1 msg/vtol_vehicle_status.msg
 enum mode {
-	ROTARY_WING = 0,
-	FIXED_WING,
-	TRANSITION_TO_FW,
-	TRANSITION_TO_MC,
-	EXTERNAL
+	TRANSITION_TO_FW = 1,
+	TRANSITION_TO_MC = 2,
+	ROTARY_WING = 3,
+	FIXED_WING = 4,
+	EXTERNAL = 5
 };
 
 enum vtol_type {

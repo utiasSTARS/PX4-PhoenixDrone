@@ -56,8 +56,8 @@ include(CMakeParseArguments)
 #
 #	px4_parse_function_args
 #
-#	This function simpliies usage of the cmake_parse_arguments module.
-#	It is inteded to be called by other functions.
+#	This function simplifies usage of the cmake_parse_arguments module.
+#	It is intended to be called by other functions.
 #
 #	Usage:
 #		px4_parse_function_args(
@@ -148,7 +148,7 @@ function(px4_add_git_submodule)
 		)
 	add_custom_target(${TARGET}
 		WORKING_DIRECTORY ${PX4_SOURCE_DIR}
-# todo:Not have 2 list of submodues one (see the end of Tools/check_submodules.sh and Firmware/CMakeLists.txt)
+# todo:Not have 2 list of submodules one (see the end of Tools/check_submodules.sh and Firmware/CMakeLists.txt)
 # using the list of submodules from the CMake file to drive the test
 #		COMMAND Tools/check_submodules.sh ${PATH}
 		DEPENDS ${PX4_BINARY_DIR}/git_init_${NAME}.stamp
@@ -165,7 +165,7 @@ endfunction()
 #		px4_prepend_string(OUT <output-list> STR <string> LIST <list>)
 #
 #	Input:
-#		STR			: string to prepend
+#		STR		: string to prepend
 #		LIST		: list to prepend to
 #
 #	Output:
@@ -701,13 +701,15 @@ function(px4_add_common_flags)
 		)
 	endif()
 
-	if ($ENV{MEMORY_DEBUG} MATCHES "1")
+	# optimization flags and santiziers (ASAN, TSAN, UBSAN)
+	if ($ENV{PX4_ASAN} MATCHES "1")
 		message(STATUS "address sanitizer enabled")
-		if ("${OS}" STREQUAL "nuttx")
-			set(max_optimization -Os)
-		elseif (${BOARD} STREQUAL "bebop")
-			set(max_optimization -Os)
-		endif()
+
+		# environment variables
+		# ASAN_OPTIONS=detect_stack_use_after_return=1
+		# ASAN_OPTIONS=check_initialization_order=1
+
+		set(max_optimization -O1)
 
 		# Do not use optimization_flags (without _) as that is already used.
 		set(_optimization_flags
@@ -717,7 +719,59 @@ function(px4_add_common_flags)
 			-ffunction-sections
 			-fdata-sections
 			-g3 -fsanitize=address
+			#-fsanitize-address-use-after-scope
 			)
+
+	elseif ($ENV{PX4_TSAN} MATCHES "1")
+		message(STATUS "thread sanitizer enabled")
+
+		# needs some optimization for usable performance
+		set(max_optimization -O1)
+
+		# Do not use optimization_flags (without _) as that is already used.
+		set(_optimization_flags
+			-fno-strict-aliasing
+			-fno-omit-frame-pointer
+			-funsafe-math-optimizations
+			-ffunction-sections
+			-fdata-sections
+			-g3 -fsanitize=thread
+			)
+
+	elseif ($ENV{PX4_UBSAN} MATCHES "1")
+		message(STATUS "undefined behaviour sanitizer enabled")
+
+		set(max_optimization -O2)
+
+		# Do not use optimization_flags (without _) as that is already used.
+		set(_optimization_flags
+			-fno-strict-aliasing
+			-fno-omit-frame-pointer
+			-funsafe-math-optimizations
+			-ffunction-sections
+			-fdata-sections
+			-g3
+			#-fsanitize=alignment
+			-fsanitize=bool
+			-fsanitize=bounds
+			-fsanitize=enum
+			#-fsanitize=float-cast-overflow
+			-fsanitize=float-divide-by-zero
+			#-fsanitize=function
+			-fsanitize=integer-divide-by-zero
+			-fsanitize=nonnull-attribute
+			-fsanitize=null
+			-fsanitize=object-size
+			-fsanitize=return
+			-fsanitize=returns-nonnull-attribute
+			-fsanitize=shift
+			-fsanitize=signed-integer-overflow
+			-fsanitize=unreachable
+			#-fsanitize=unsigned-integer-overflow
+			-fsanitize=vla-bound
+			-fsanitize=vptr
+			)
+
 	else()
 		if ("${OS}" STREQUAL "nuttx")
 			set(max_optimization -Os)
@@ -740,11 +794,9 @@ function(px4_add_common_flags)
 			)
 	endif()
 
-	if (NOT ${CMAKE_C_COMPILER_ID} MATCHES ".*Clang.*")
-		list(APPEND _optimization_flags
-			-fno-strength-reduce
-			-fno-builtin-printf
-		)
+	# code coverage
+	if ($ENV{PX4_CODE_COVERAGE} MATCHES "1")
+		#set(max_optimization -O0)
 	endif()
 
 	set(c_warnings
@@ -754,13 +806,6 @@ function(px4_add_common_flags)
 		-Wnested-externs
 		)
 
-	if (NOT ${CMAKE_C_COMPILER_ID} MATCHES ".*Clang.*")
-		list(APPEND c_warnings
-			-Wold-style-declaration
-			-Wmissing-parameter-type
-		)
-	endif()
-
 	set(c_compile_flags
 		-g
 		-std=gnu99
@@ -769,6 +814,7 @@ function(px4_add_common_flags)
 
 	set(cxx_warnings
 		-Wno-missing-field-initializers
+		#-Weffc++
 		)
 
 	set(cxx_compile_flags
@@ -781,7 +827,18 @@ function(px4_add_common_flags)
 		-D__CUSTOM_FILE_IO__
 		)
 
-	if (NOT (${CMAKE_C_COMPILER_ID} MATCHES ".*Clang.*"))
+	# clang
+	if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+		# force color for clang (needed for clang + ccache)
+		list(APPEND _optimization_flags
+			-fcolor-diagnostics
+		)
+	else()
+		list(APPEND _optimization_flags
+			-fno-strength-reduce
+			-fno-builtin-printf
+		)
+
 		# -fcheck-new is a no-op for Clang in general
 		# and has no effect, but can generate a compile
 		# error for some OS
@@ -815,21 +872,18 @@ function(px4_add_common_flags)
 		)
 
 	set(added_include_dirs
-		${PX4_SOURCE_DIR}/src
 		${PX4_BINARY_DIR}
 		${PX4_BINARY_DIR}/src
-		${PX4_SOURCE_DIR}/src/modules
+		${PX4_BINARY_DIR}/src/modules
+		${PX4_BINARY_DIR}/src/modules/px4_messages
+		${PX4_SOURCE_DIR}/mavlink/include/mavlink
+		${PX4_SOURCE_DIR}/src
+		${PX4_SOURCE_DIR}/src/drivers/boards/${BOARD}
 		${PX4_SOURCE_DIR}/src/include
 		${PX4_SOURCE_DIR}/src/lib
-		${PX4_SOURCE_DIR}/src/platforms
-		# TODO Build/versioning was in Makefile,
-		# do we need this, how does it work with cmake
-		${PX4_SOURCE_DIR}/src/drivers/boards/${BOARD}
-		${PX4_BINARY_DIR}
-		${PX4_BINARY_DIR}/src/modules/px4_messages
-		${PX4_BINARY_DIR}/src/modules
-		${PX4_SOURCE_DIR}/mavlink/include/mavlink
 		${PX4_SOURCE_DIR}/src/lib/DriverFramework/framework/include
+		${PX4_SOURCE_DIR}/src/modules
+		${PX4_SOURCE_DIR}/src/platforms
 		)
 
 	list(APPEND added_include_dirs
@@ -931,7 +985,7 @@ function(px4_create_git_hash_header)
 	file(WRITE ${OUT} "")
 	add_custom_command(
 		OUTPUT __fake
-		COMMAND ${PYTHON_EXECUTABLE} ${PX4_SOURCE_DIR}/Tools/px_update_git_header.py ${OUT}
+		COMMAND ${PYTHON_EXECUTABLE} ${PX4_SOURCE_DIR}/Tools/px_update_git_header.py ${OUT} > ${PX4_BINARY_DIR}/git_header.log
 		WORKING_DIRECTORY ${PX4_SOURCE_DIR}
 		COMMENT "Generating git hash header"
 		)
@@ -960,7 +1014,7 @@ endfunction()
 function(px4_generate_parameters_xml)
 	px4_parse_function_args(
 		NAME px4_generate_parameters_xml
-		ONE_VALUE OUT BOARD
+		ONE_VALUE OUT BOARD SCOPE
 		REQUIRED OUT BOARD
 		ARGN ${ARGN})
 	set(path ${PX4_SOURCE_DIR}/src)
@@ -969,8 +1023,9 @@ function(px4_generate_parameters_xml)
 		)
 	add_custom_command(OUTPUT ${OUT}
 		COMMAND ${PYTHON_EXECUTABLE} ${PX4_SOURCE_DIR}/Tools/px_process_params.py
-			-s ${path} --board CONFIG_ARCH_${BOARD} --xml --inject-xml
-		DEPENDS ${param_src_files}
+			-s ${path} --board CONFIG_ARCH_${BOARD} --xml --inject-xml --scope ${SCOPE}
+		DEPENDS ${param_src_files} ${PX4_SOURCE_DIR}/Tools/px_process_params.py
+			${PX4_SOURCE_DIR}/Tools/px_generate_params.py
 		)
 	set(${OUT} ${${OUT}} PARENT_SCOPE)
 endfunction()

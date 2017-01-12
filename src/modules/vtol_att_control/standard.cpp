@@ -44,6 +44,8 @@
 #include "standard.h"
 #include "vtol_att_control_main.h"
 
+#include <float.h>
+
 Standard::Standard(VtolAttitudeControl *attc) :
 	VtolType(attc),
 	_flag_enable_mc_motors(true),
@@ -221,11 +223,11 @@ void Standard::update_vtol_state()
 		break;
 
 	case TRANSITION_TO_FW:
-		_vtol_mode = mode::TRANSITION_TO_MC;
+		_vtol_mode = mode::TRANSITION_TO_FW;
 		break;
 
 	case TRANSITION_TO_MC:
-		_vtol_mode = mode::TRANSITION_TO_FW;
+		_vtol_mode = mode::TRANSITION_TO_MC;
 		break;
 	}
 }
