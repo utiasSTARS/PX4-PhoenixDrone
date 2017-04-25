@@ -2096,13 +2096,13 @@ int commander_thread_main(int argc, char *argv[])
 		if (updated) {
 			/* position changed */
 			orb_copy(ORB_ID(vehicle_local_position), local_position_sub, &local_position);
-			if (local_position.z_valid){
-				//mavlink_and_console_log_info(&mavlink_log_pub, "Z valid: %.2f", (double)local_position.z);
-			}
-			else {mavlink_and_console_log_info(&mavlink_log_pub, "Z invalid.");}
-		}
-		else{
-			//mavlink_and_console_log_info(&mavlink_log_pub, "Local Position Sub not updated.");
+//			if (local_position.z_valid){
+//				//mavlink_and_console_log_info(&mavlink_log_pub, "Z valid: %.2f", (double)local_position.z);
+//			}
+//			else {mavlink_and_console_log_info(&mavlink_log_pub, "Z invalid.");}
+//		}
+//		else{
+//			//mavlink_and_console_log_info(&mavlink_log_pub, "Local Position Sub not updated.");
 		}
 
 		/* update attitude estimate */
