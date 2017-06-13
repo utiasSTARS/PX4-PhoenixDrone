@@ -132,6 +132,10 @@ set(config_module_list
 	modules/uORB
 	modules/dataman
 
+    #
+    # Custom mdules
+    modules/radsmeter
+
 	#
 	# Libraries
 	#
