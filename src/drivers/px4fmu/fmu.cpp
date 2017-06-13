@@ -154,6 +154,9 @@ public:
 
 	void update_pwm_trims();
 
+	int cancel_hp_work();
+	int	start_hp_work();
+
 private:
 	enum RC_SCAN {
 		RC_SCAN_PPM = 0,
@@ -2757,6 +2760,20 @@ PX4FMU::dsm_bind_ioctl(int dsmMode)
 	}
 }
 
+int
+PX4FMU::cancel_hp_work()
+{
+	work_cancel(HPWORK, &_work);
+	return 0;
+}
+
+int
+PX4FMU::start_hp_work()
+{
+	work_queue(HPWORK, &_work, (worker_t)&PX4FMU::cycle_trampoline, this, 0);
+	return 0;
+}
+
 namespace
 {
 
@@ -3374,6 +3391,22 @@ fmu_main(int argc, char *argv[])
 		} else {
 			peripheral_reset(0);
 			warnx("resettet default time");
+		}
+
+		exit(0);
+	}
+
+	if (!strcmp(verb, "cancel_hpwork")) {
+		if (g_fmu!= NULL){
+			g_fmu->cancel_hp_work();
+		}
+
+		exit(0);
+	}
+
+	if (!strcmp(verb, "start_hpwork")) {
+		if (g_fmu!= NULL){
+			g_fmu->start_hp_work();
 		}
 
 		exit(0);
