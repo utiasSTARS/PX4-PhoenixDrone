@@ -587,7 +587,7 @@ then
 			# Avoid using ttyS1 for MAVLink on FMUv4
 			if ver hwcmp PX4FMU_V4
 			then
-				set MAVLINK_F "-r 1200 -d /dev/ttyS1"
+				set MAVLINK_F "-r 20000 -m config -b 230400 -d /dev/ttyS1"
 				# Start MAVLink on Wifi (ESP8266 port)
 				mavlink start -r 20000 -m config -b 921600 -d /dev/ttyS0
 			fi
