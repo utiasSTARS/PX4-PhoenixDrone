@@ -1633,6 +1633,7 @@ protected:
 			msg.vx = pos.vx;
 			msg.vy = pos.vy;
 			msg.vz = pos.vz;
+			msg.xy_valid = (uint8_t)pos.xy_valid;
 
 			mavlink_msg_local_position_ned_send_struct(_mavlink->get_channel(), &msg);
 		}
