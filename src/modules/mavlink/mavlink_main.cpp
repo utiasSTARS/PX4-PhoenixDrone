@@ -2113,6 +2113,7 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("NAV_CONTROLLER_OUTPUT", 10.0f);
 		configure_stream("GLOBAL_POSITION_INT", 10.0f);
 		configure_stream("LOCAL_POSITION_NED", 30.0f);
+		configure_stream("POSITION_TARGET_LOCAL_NED", 30.0f);
 		configure_stream("POSITION_TARGET_GLOBAL_INT", 10.0f);
 		configure_stream("ATTITUDE_TARGET", 8.0f);
 		configure_stream("HOME_POSITION", 0.5f);
