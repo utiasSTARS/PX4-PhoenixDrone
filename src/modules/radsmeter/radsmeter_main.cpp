@@ -26,6 +26,7 @@
  */
 #define RADS_FILTER_CONSTANT 	0.2f
 #define NUM_POLES 7
+#define NUM_SYNC_PER_CYCLE 3
 #define TIMEOUT_MS 10
 
 /***********************************************
@@ -78,8 +79,8 @@ int radsmeterDaemon(void)
 		if (ret == 0)
 		{
 			_krads.time = hrt_absolute_time();
-			_krads.krads = 2 * 3.1415926f * 1000.f / (NUM_POLES * timeDiffFilt);
-			_krads.krads_raw = 2 * 3.1415926f * 1000.f / (NUM_POLES * timeDiff);
+			_krads.krads = 2 * 3.1415926f * 1000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * timeDiffFilt);
+			_krads.krads_raw = 2 * 3.1415926f * 1000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * timeDiff);
 			//kradsPub.Publish ((uint8_t*) &_krads);
 		}
 		/* timeout */
