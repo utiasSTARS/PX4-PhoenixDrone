@@ -16,6 +16,8 @@
 #include <poll.h>
 #include <string.h>
 #include <math.h>
+
+#include <uORB/topics/esc_rads.h>
 /****************
  * Pin Definition
  */
@@ -39,11 +41,13 @@ int StopDaemon (void);
 int PrintStatus(void);
 void UpdateTimeDiffUp (void);
 void UpdateTimeDiffDown (void);
+int PublishRads (void);
 int callback(int irq, FAR void *context);
 
 /*****************
  * Global Variables
  */
+orb_advert_t	_esc_rads_pub;
 sem_t _sem_loop_timer;
 static volatile bool thread_running = false;
 static volatile uint64_t timeMeasUp[2], timeMeasDown[2];
@@ -56,6 +60,8 @@ struct krads_data{
 	float krads;
 	float krads_raw;
 }_krads;
+
+struct esc_rads_s esc_rads_msg;
 int radsmeterDaemon(void)
 {
 	stm32_configgpio(GPIO_LMOTOR_RPM_FB);
@@ -78,10 +84,10 @@ int radsmeterDaemon(void)
 
 		if (ret == 0)
 		{
-			_krads.time = hrt_absolute_time();
-			_krads.krads = 2 * 3.1415926f * 1000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * timeDiffFilt);
-			_krads.krads_raw = 2 * 3.1415926f * 1000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * timeDiff);
-			//kradsPub.Publish ((uint8_t*) &_krads);
+			esc_rads_msg.timestamp = hrt_absolute_time();
+			esc_rads_msg.rads_filtered[0] = 2 * 3.1415926f * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * timeDiffFilt);
+			esc_rads_msg.rads_raw[0] = 2 * 3.1415926f * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * timeDiff);
+			PublishRads();
 		}
 		/* timeout */
 		else
@@ -89,12 +95,23 @@ int radsmeterDaemon(void)
 			//printf("timeout!\n");
 			timeDiffFilt = 0.0f;
 			timeDiff = 0.0f;
-			_krads.time = hrt_absolute_time();
-			_krads.krads = 0.0f;
-			_krads.krads_raw = 0.0f;
-			//kradsPub.Publish ((uint8_t*) &_krads);
+			esc_rads_msg.timestamp = hrt_absolute_time();
+			esc_rads_msg.rads_filtered[0] = 0.0f;
+			esc_rads_msg.rads_raw[0] = 0.0f;
+			PublishRads();
 		}
 
+	}
+	return 0;
+}
+
+int PublishRads ()
+{
+	if (_esc_rads_pub != nullptr) {
+		return orb_publish(ORB_ID(esc_rads), _esc_rads_pub, &esc_rads_msg);
+
+	} else {
+		_esc_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
 	}
 	return 0;
 }
