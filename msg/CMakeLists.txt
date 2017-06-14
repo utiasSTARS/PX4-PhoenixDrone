@@ -51,6 +51,7 @@ set(msg_file_names
 	ekf2_replay.msg
 	esc_report.msg
 	esc_status.msg
+	esc_rads.msg
 	estimator_status.msg
 	fence.msg
 	fence_vertex.msg
