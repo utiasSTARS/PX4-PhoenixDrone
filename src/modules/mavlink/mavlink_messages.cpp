@@ -91,6 +91,7 @@
 #include <uORB/topics/wind_estimate.h>
 #include <uORB/topics/mount_orientation.h>
 #include <uORB/topics/collision_report.h>
+#include <uORB/topics/esc_rads.h>
 #include <uORB/uORB.h>
 
 
@@ -3904,6 +3905,72 @@ protected:
 	}
 };
 
+class MavlinkStreamESCRads : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamESCRads::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "ESC_RADS";
+	}
+
+	static uint16_t get_id_static()
+	{
+		return MAVLINK_MSG_ID_ESC_RADS;
+	}
+
+	uint16_t get_id()
+	{
+		return get_id_static();
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamESCRads(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return _rads_sub->is_published() ? (MAVLINK_MSG_ID_OPTICAL_FLOW_RAD_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) : 0;
+	}
+
+private:
+	MavlinkOrbSubscription *_rads_sub;
+
+	/* do not allow top copying this class */
+	MavlinkStreamESCRads(MavlinkStreamESCRads &);
+	MavlinkStreamESCRads &operator = (const MavlinkStreamESCRads &);
+
+protected:
+	explicit MavlinkStreamESCRads(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_rads_sub(_mavlink->add_orb_subscription(ORB_ID(esc_rads)))
+	{}
+
+	void send(const hrt_abstime t)
+	{
+		struct esc_rads_s rads;
+
+		if (_rads_sub->update(&rads)) {
+			mavlink_esc_rads_t msg;
+
+			msg.motor0_fil = rads.rads_filtered[0];
+			msg.motor1_fil = rads.rads_filtered[1];
+			msg.motor2_fil = rads.rads_filtered[2];
+			msg.motor3_fil = rads.rads_filtered[3];
+			msg.motor0_raw = rads.rads_raw[0];
+			msg.motor1_raw = rads.rads_raw[1];
+			msg.motor2_raw = rads.rads_raw[2];
+			msg.motor3_raw = rads.rads_raw[3];
+
+			mavlink_msg_esc_rads_send_struct(_mavlink->get_channel(), &msg);
+		}
+	}
+};
+
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static, &MavlinkStreamHeartbeat::get_id_static),
 	new StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static, &MavlinkStreamStatustext::get_id_static),
@@ -3952,5 +4019,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamMountOrientation::new_instance, &MavlinkStreamMountOrientation::get_name_static, &MavlinkStreamMountOrientation::get_id_static),
 	new StreamListItem(&MavlinkStreamHighLatency::new_instance, &MavlinkStreamHighLatency::get_name_static, &MavlinkStreamWind::get_id_static),
 	new StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
+	new StreamListItem(&MavlinkStreamESCRads::new_instance, &MavlinkStreamESCRads::get_name_static, &MavlinkStreamESCRads::get_id_static),
 	nullptr
 };
