@@ -147,7 +147,7 @@ int StopDaemon (void)
 
 int PrintStatus()
 {
-	printf("krads: %.3f\n", (double) _krads.krads);
+	printf("krads: %.3f\n", (double) esc_rads_msg.rads_filtered[0]);
 	return 0;
 
 }
