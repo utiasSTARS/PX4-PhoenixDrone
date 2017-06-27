@@ -692,6 +692,12 @@ struct mixer_heli_s {
 	struct mixer_heli_servo_s	servos[4];	/**< up to four inputs */
 };
 
+struct mixer_ts_s {
+	uint8_t				control_count;
+	float				param1;
+	float 				param2;
+};
+
 /**
  * Generic helicopter mixer for helicopters with swash plate.
  *
@@ -749,6 +755,30 @@ private:
 	/* do not allow to copy */
 	HelicopterMixer(const HelicopterMixer &);
 	HelicopterMixer operator=(const HelicopterMixer &);
+};
+
+class __EXPORT TailsitterMixer : public Mixer
+{
+public:
+	TailsitterMixer(ControlCallback control_cb, uintptr_t cb_handle,
+			mixer_ts_s *mixer_info);
+
+	~TailsitterMixer();
+
+	static TailsitterMixer		*from_text(Mixer::ControlCallback control_cb,
+				uintptr_t cb_handle,
+				const char *buf,
+				unsigned &buflen);
+	virtual unsigned		mix(float *outputs, unsigned space, uint16_t *status_reg);
+	virtual uint16_t		get_saturation_status(void) { return 0; }
+	virtual void			groups_required(uint32_t &groups);
+	unsigned set_trim(float trim)
+	{
+		return 4;
+	}
+private:
+	mixer_ts_s				_mixer_info;
+
 };
 
 #endif

@@ -46,6 +46,7 @@ px4_add_module(
 		mixer.cpp
 		mixer_group.cpp
 		mixer_multirotor.cpp
+		mixer_tailsitter.cpp
 		mixer_simple.cpp
 		mixer_helicopter.cpp
 		mixer_load.c
