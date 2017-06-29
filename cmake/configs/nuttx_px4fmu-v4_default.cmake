@@ -74,6 +74,7 @@ set(config_module_list
 	systemcmds/ver
 	systemcmds/sd_bench
 	systemcmds/motor_ramp
+	systemcmds/actuator_test
 
 	#
 	# Testing
