@@ -46,13 +46,14 @@ int actuator_test_main(int argc, char *argv[])
 
 
 	msg.timestamp = hrt_absolute_time();
+	//if (chanel == 4) channel = 5;//Go around the thrust index to avoid arming issue
 	msg.control[channel - 1] = value;
 
 	if (_actuator_test_pub != NULL){
-		orb_publish(ORB_ID(actuator_controls_0), _actuator_test_pub, &msg);
+		orb_publish(ORB_ID(actuator_controls_2), _actuator_test_pub, &msg);
 	}
 	else{
-		_actuator_test_pub = orb_advertise(ORB_ID(actuator_controls_0), &msg);
+		_actuator_test_pub = orb_advertise(ORB_ID(actuator_controls_2), &msg);
 	}
 
 	return 0;
