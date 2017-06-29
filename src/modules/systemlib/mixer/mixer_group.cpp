@@ -231,6 +231,10 @@ MixerGroup::load_from_buf(const char *buf, unsigned &buflen)
 			m = HelicopterMixer::from_text(_control_cb, _cb_handle, p, resid);
 			break;
 
+		case 'T':
+			m = TailsitterMixer::from_text(_control_cb, _cb_handle, p, resid);
+			break;
+
 		default:
 			/* it's probably junk or whitespace, skip a byte and retry */
 			buflen--;

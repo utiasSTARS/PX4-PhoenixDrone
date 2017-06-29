@@ -693,9 +693,13 @@ struct mixer_heli_s {
 };
 
 struct mixer_ts_s {
-	uint8_t				control_count;
-	float				param1;
-	float 				param2;
+	float				deg_min; /*Minimum Elevon Deflection in deg*/
+	float				deg_max; /*Maximum Elevon Deflection in deg*/
+	float 				k_w2; /*PWM = k_w2*(w^2) + k_w * w + k_c */
+	float 				k_w;
+	float 				k_c;
+	//TODO: Kp, Ki for rpm control and K, I term max PWM Value to be added
+
 };
 
 /**

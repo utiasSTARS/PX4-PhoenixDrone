@@ -57,6 +57,24 @@ TailsitterMixer::from_text(Mixer::ControlCallback control_cb,
 		uintptr_t cb_handle, const char *buf, unsigned &buflen)
 {
 	mixer_ts_s mixer_info;
+	int s[5];
+	int used;
+	/* enforce that the mixer ends with a new line */
+	if (!string_well_formed(buf, buflen)) {
+		return nullptr;
+	}
+
+	if (sscanf(buf, "T: %d %d %d %d %d%n", &s[0], &s[1], &s[2], &s[3], &s[4], &used) != 5) {
+		debug("tailsitter parse failed on '%s'", buf);
+		return nullptr;
+	}
+
+	mixer_info.deg_min = s[0]/100.f;
+	mixer_info.deg_max = s[1]/100.f;
+	mixer_info.k_w2 = s[2]/1.f;
+	mixer_info.k_w = s[3]/1.f;
+	mixer_info.k_c = s[4]/1.f;
+
 	//TODO: Write parser to setup parameters
 	TailsitterMixer *tm = new TailsitterMixer(
 			control_cb,
