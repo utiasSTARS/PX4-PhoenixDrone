@@ -82,6 +82,7 @@
 #include <lib/rc/sumd.h>
 
 #include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/ts_actuator_controls.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/vehicle_command.h>
@@ -130,7 +131,7 @@ public:
 		MODE_5CAP,
 		MODE_6CAP,
 	};
-	PX4FMU();
+	PX4FMU(bool ts_mode);
 	virtual ~PX4FMU();
 
 	virtual int	ioctl(file *filp, int cmd, unsigned long arg);
@@ -221,6 +222,14 @@ private:
 	pollfd	_poll_fds[actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS];
 	unsigned	_poll_fds_num;
 
+	/*Tailsitter actuator subscriptions*/
+	int		_ts_control_subs[ts_actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS];
+	ts_actuator_controls_s _ts_controls[ts_actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS];
+	orb_id_t	_ts_control_topics[ts_actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS];
+	pollfd  _ts_poll_fds[ts_actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS];
+	unsigned	_ts_poll_fds_num;
+
+
 	static pwm_limit_t	_pwm_limit;
 	static actuator_armed_s	_armed;
 	uint16_t	_failsafe_pwm[_max_actuators];
@@ -241,6 +250,8 @@ private:
 
 	perf_counter_t	_ctl_latency;
 
+	bool _ts_mode;
+
 	static bool	arm_nothrottle()
 	{
 		return ((_armed.prearmed && !_armed.armed) || _armed.in_esc_calibration_mode);
@@ -258,6 +269,7 @@ private:
 	void		capture_callback(uint32_t chan_index,
 					 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow);
 	void		subscribe();
+	void 		ts_subscribe();
 	int		set_pwm_rate(unsigned rate_map, unsigned default_rate, unsigned alt_rate);
 	int		pwm_ioctl(file *filp, int cmd, unsigned long arg);
 	void		update_pwm_rev_mask();
@@ -312,7 +324,7 @@ PX4FMU	*g_fmu;
 
 } // namespace
 
-PX4FMU::PX4FMU() :
+PX4FMU::PX4FMU(bool ts_mode) :
 	CDev("fmu", PX4FMU_DEVICE_PATH),
 	_mode(MODE_NONE),
 	_pwm_default_rate(50),
@@ -342,6 +354,8 @@ PX4FMU::PX4FMU() :
 	_groups_subscribed(0),
 	_control_subs{ -1},
 	_poll_fds_num(0),
+	_ts_control_subs{ -1},
+	_ts_poll_fds_num(0),
 	_failsafe_pwm{0},
 	_disarmed_pwm{0},
 	_reverse_pwm_mask(0),
@@ -353,7 +367,8 @@ PX4FMU::PX4FMU() :
 	_to_mixer_status(nullptr),
 	_mot_t_max(0.0f),
 	_thr_mdl_fac(0.0f),
-	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat"))
+	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat")),
+	_ts_mode(ts_mode)
 {
 	for (unsigned i = 0; i < _max_actuators; i++) {
 		_min_pwm[i] = PWM_DEFAULT_MIN;
@@ -366,8 +381,14 @@ PX4FMU::PX4FMU() :
 	_control_topics[2] = ORB_ID(actuator_controls_2);
 	_control_topics[3] = ORB_ID(actuator_controls_3);
 
+	_ts_control_topics[0] = ORB_ID(ts_actuator_controls_0);
+	_ts_control_topics[1] = ORB_ID(ts_actuator_controls_1);
+
 	memset(_controls, 0, sizeof(_controls));
 	memset(_poll_fds, 0, sizeof(_poll_fds));
+
+	memset(_ts_controls, 0, sizeof(_ts_controls));
+	memset(_ts_poll_fds, 0, sizeof(_ts_poll_fds));
 
 	// Safely initialize armed flags.
 	_armed.armed = false;
@@ -733,7 +754,7 @@ PX4FMU::subscribe()
 	uint32_t unsub_groups = _groups_subscribed & ~_groups_required;
 	_poll_fds_num = 0;
 
-	for (unsigned i = 0; i < actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) {
+	for (unsigned i = 0; i < actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) 	{
 		if (sub_groups & (1 << i)) {
 			DEVICE_DEBUG("subscribe to actuator_controls_%d", i);
 			_control_subs[i] = orb_subscribe(_control_topics[i]);
@@ -749,6 +770,25 @@ PX4FMU::subscribe()
 			_poll_fds[_poll_fds_num].fd = _control_subs[i];
 			_poll_fds[_poll_fds_num].events = POLLIN;
 			_poll_fds_num++;
+		}
+	}
+}
+
+void
+PX4FMU::ts_subscribe()
+{
+	_ts_poll_fds_num = 0;
+
+	for (unsigned i = 0; i < ts_actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++)
+	{
+		//Subscribe to TS actuator control topics
+		_ts_control_subs[i] = orb_subscribe(_ts_control_topics[i]);
+
+		//Set up Polling
+		if (_ts_control_subs[i] > 0) {
+			_ts_poll_fds[_poll_fds_num].fd = _ts_control_subs[i];
+			_ts_poll_fds[_poll_fds_num].events = POLLIN;
+			_ts_poll_fds_num++;
 		}
 	}
 }
@@ -2946,13 +2986,13 @@ int fmu_new_i2c_speed(unsigned bus, unsigned clock_hz)
 }
 
 int
-fmu_start(void)
+fmu_start(bool ts_mode)
 {
 	int ret = OK;
 
 	if (g_fmu == nullptr) {
 
-		g_fmu = new PX4FMU;
+		g_fmu = new PX4FMU(ts_mode);
 
 		if (g_fmu == nullptr) {
 			ret = -ENOMEM;
@@ -3249,6 +3289,10 @@ fmu_main(int argc, char *argv[])
 	PortMode new_mode = PORT_MODE_UNSET;
 	const char *verb = argv[1];
 
+	if (!strcmp(verb, "ts")) {
+
+	}
+
 	if (!strcmp(verb, "bind")) {
 		bind_spektrum();
 		exit(0);
@@ -3286,9 +3330,18 @@ fmu_main(int argc, char *argv[])
 		     (unsigned)id[6], (unsigned)id[7], (unsigned)id[8], (unsigned)id[9], (unsigned)id[10], (unsigned)id[11]);
 	}
 
-	if (fmu_start() != OK) {
-		errx(1, "failed to start the FMU driver");
+	if (!strcmp(verb, "ts")){
+		if (fmu_start(true) != OK) {
+			errx(1, "failed to start the FMU driver in TS mode.");
+		}
+		new_mode = PORT_FULL_PWM; // TODO: Change to 2INPUT mode for radsmeter
 	}
+	else{
+		if (fmu_start(false) != OK) {
+			errx(1, "failed to start the FMU driver");
+		}
+	}
+
 
 	/*
 	 * Mode switches.
