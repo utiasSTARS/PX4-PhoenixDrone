@@ -773,6 +773,7 @@ public:
 				uintptr_t cb_handle,
 				const char *buf,
 				unsigned &buflen);
+	void	set_max_delta_out_once(float delta_out_max);
 	virtual unsigned		mix(float *outputs, unsigned space, uint16_t *status_reg);
 	virtual uint16_t		get_saturation_status(void) { return 0; }
 	virtual void			groups_required(uint32_t &groups);
@@ -782,6 +783,7 @@ public:
 	}
 private:
 	mixer_ts_s				_mixer_info;
+	float					_delta_out_max;
 
 };
 

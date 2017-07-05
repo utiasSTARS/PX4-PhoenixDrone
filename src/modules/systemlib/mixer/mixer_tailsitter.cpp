@@ -43,7 +43,8 @@ TailsitterMixer::TailsitterMixer(ControlCallback control_cb,
 		uintptr_t cb_handle,
 		mixer_ts_s *mixer_info):
 				Mixer(control_cb, cb_handle),
-				_mixer_info(*mixer_info)
+				_mixer_info(*mixer_info),
+				_delta_out_max(0)
 {
 
 }
@@ -90,16 +91,23 @@ TailsitterMixer::from_text(Mixer::ControlCallback control_cb,
 	return tm;
 }
 
+void
+TailsitterMixer::set_max_delta_out_once(float delta_out_max)
+{
+	_delta_out_max = delta_out_max;
+}
 
 unsigned
 TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 {
-	return 3;
+
+	return 6;
 }
 
 void
 TailsitterMixer::groups_required(uint32_t &groups)
 {
-	/* XXX for now, hardcoded to indexes 0-3 in control group zero */
+	/* Subscribe group 0 and 1 from ts_actuator_controls*/
 	groups |= (1 << 0);
+	groups |= (1 << 1);
 }
