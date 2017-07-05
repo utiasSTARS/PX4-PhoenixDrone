@@ -29,15 +29,23 @@
 //#include <debug.h>
 //#define debug(fmt, args...)	syslog(fmt "\n", ##args)
 
-//namespace
-//{
-//
-//float constrain(float val, float min, float max)
-//{
-//	return (val < min) ? min : ((val > max) ? max : val);
-//}
-//
-//}
+#define NAN_VALUE	(0.0f/0.0f)
+
+namespace
+{
+
+float constrain(float val, float min, float max)
+{
+	return (val < min) ? min : ((val > max) ? max : val);
+}
+
+float normalize(float val, float val_min, float val_max, float nor_min, float nor_max)
+{
+	if (!(val >= val_min && val <= val_max && nor_min < nor_max)) return NAN_VALUE;
+	return nor_min * (val - val_min)/(val_max - val_min) + nor_max * (val_max - val)/(val_max - val_min);
+}
+
+} // anonymous namespace
 
 TailsitterMixer::TailsitterMixer(ControlCallback control_cb,
 		uintptr_t cb_handle,
@@ -58,23 +66,24 @@ TailsitterMixer::from_text(Mixer::ControlCallback control_cb,
 		uintptr_t cb_handle, const char *buf, unsigned &buflen)
 {
 	mixer_ts_s mixer_info;
-	int s[5];
+	int s[6];
 	int used;
 	/* enforce that the mixer ends with a new line */
 	if (!string_well_formed(buf, buflen)) {
 		return nullptr;
 	}
 
-	if (sscanf(buf, "T: %d %d %d %d %d%n", &s[0], &s[1], &s[2], &s[3], &s[4], &used) != 5) {
+	if (sscanf(buf, "T: %d %d %d %d %d %d%n", &s[0], &s[1], &s[2], &s[3], &s[4], &s[5], &used) != 6) {
 		debug("tailsitter parse failed on '%s'", buf);
 		return nullptr;
 	}
 
-	mixer_info.deg_min = s[0]/100.f;
-	mixer_info.deg_max = s[1]/100.f;
-	mixer_info.k_w2 = s[2]/1.f;
-	mixer_info.k_w = s[3]/1.f;
-	mixer_info.k_c = s[4]/1.f;
+	mixer_info.rads_max = s[0]/1.f;
+	mixer_info.deg_min = s[1]/100.f;
+	mixer_info.deg_max = s[2]/100.f;
+	mixer_info.k_w2 = s[3]/1.f;
+	mixer_info.k_w = s[4]/1.f;
+	mixer_info.k_c = s[5]/1.f;
 
 	//TODO: Write parser to setup parameters
 	TailsitterMixer *tm = new TailsitterMixer(
@@ -100,6 +109,25 @@ TailsitterMixer::set_max_delta_out_once(float delta_out_max)
 unsigned
 TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 {
+	float rads_left  = constrain(get_control(0, 0), 0, _mixer_info.rads_max);
+	float rads_right = constrain(get_control(0, 1), 0, _mixer_info.rads_max);
+
+	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max);
+	float elv_right = constrain(get_control(0, 3), _mixer_info.deg_min, _mixer_info.deg_max);
+
+	outputs[0] = _mixer_info.k_w2 * rads_left * rads_left
+				+ _mixer_info.k_w * rads_left + _mixer_info.k_c;
+
+	outputs[1] = _mixer_info.k_w2 * rads_right * rads_right
+				+ _mixer_info.k_w * rads_right + _mixer_info.k_c;
+
+	outputs[2] = 0;//Not being used, will be set to NaN in tsfmu cycle
+	outputs[3] = 0;
+
+	//Elevon deflections are linear, just normalize between -1, 1
+	outputs[4] = normalize(elv_left , _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
+	outputs[5] = normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
+
 
 	return 6;
 }
