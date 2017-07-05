@@ -15,7 +15,8 @@ set(config_module_list
 	drivers/stm32/adc
 	drivers/stm32/tone_alarm
 	drivers/led
-	drivers/px4fmu
+	#drivers/px4fmu
+	drivers/tsfmu
 	drivers/boards/px4fmu-v4
 	drivers/rgbled
 	drivers/mpu6000
