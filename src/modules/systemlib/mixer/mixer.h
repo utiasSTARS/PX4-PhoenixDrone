@@ -693,6 +693,7 @@ struct mixer_heli_s {
 };
 
 struct mixer_ts_s {
+	float				rads_max; /*Maximum motor speed which can be tracked*/
 	float				deg_min; /*Minimum Elevon Deflection in deg*/
 	float				deg_max; /*Maximum Elevon Deflection in deg*/
 	float 				k_w2; /*PWM = k_w2*(w^2) + k_w * w + k_c */

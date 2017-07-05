@@ -17,4 +17,4 @@ Channel 3 connects to the left (port) elevon.
 Channel 4 connects to the right (starboard) elevon.
 Tailsitter Mixer-- Minimum Elevon Deg*100, Maximum Elevon Deg *100, k1, k2, k3
 
-T: -3000 3000 10000 10000 0
+T: 1000 -3000 3000 10000 10000 0
