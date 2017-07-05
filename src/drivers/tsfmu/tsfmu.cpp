@@ -25,8 +25,9 @@
 
 #include <nuttx/arch.h>
 
+#include <platforms/px4_workqueue.h>
+
 #include <drivers/device/device.h>
-#include <drivers/device/i2c.h>
 #include <drivers/drv_pwm_output.h>
 #include <drivers/drv_input_capture.h>
 #include <drivers/drv_gpio.h>
@@ -46,10 +47,6 @@
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_input_capture.h>
 
-#include <lib/rc/sbus.h>
-#include <lib/rc/dsm.h>
-#include <lib/rc/st24.h>
-#include <lib/rc/sumd.h>
 
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/ts_actuator_controls.h>
@@ -58,12 +55,7 @@
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/safety.h>
-#include <uORB/topics/adc_report.h>
-#include <uORB/topics/multirotor_motor_limits.h>
 
-#ifdef HRT_PPM_CHANNEL
-# include <systemlib/ppm_decode.h>
-#endif
 
 #include <systemlib/circuit_breaker.h>
 
@@ -131,7 +123,6 @@ private:
 	int		_vehicle_cmd_sub;
 	int		_armed_sub;
 	int		_param_sub;
-	int		_adc_sub;
 	orb_advert_t	_outputs_pub;
 	unsigned	_num_outputs;
 	int		_class_instance;
@@ -251,7 +242,6 @@ TSFMU::TSFMU() :
 	_vehicle_cmd_sub(-1),
 	_armed_sub(-1),
 	_param_sub(-1),
-	_adc_sub(-1),
 	_outputs_pub(nullptr),
 	_num_outputs(0),
 	_class_instance(0),
@@ -356,7 +346,6 @@ TSFMU::~TSFMU()
 	orb_unsubscribe(_vehicle_cmd_sub);
 	orb_unsubscribe(_armed_sub);
 	orb_unsubscribe(_param_sub);
-	orb_unsubscribe(_adc_sub);
 
 
 	perf_free(_ctl_latency);
@@ -659,7 +648,6 @@ TSFMU::cycle()
 
 		_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 		_param_sub = orb_subscribe(ORB_ID(parameter_update));
-		_adc_sub = orb_subscribe(ORB_ID(adc_report));
 
 		/* initialize PWM limit lib */
 		pwm_limit_init(&_pwm_limit);//set limit->state=PWM_LIMIT_STATE_INIT, limit->time_armed = 0
