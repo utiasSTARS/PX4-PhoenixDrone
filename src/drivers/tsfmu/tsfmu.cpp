@@ -111,6 +111,7 @@ public:
 	int	start_hp_work();
 	uint32_t show_pwm_mask();
 
+	void print_info();
 private:
 
 	bool _report_lock = true;
@@ -302,6 +303,7 @@ TSFMU::TSFMU() :
 	memset(_poll_fds, 0, sizeof(_poll_fds));
 
 	mixer_ts_s default_mixer_info;
+	default_mixer_info.rads_max = 1000.f;
 	default_mixer_info.deg_max = 30.f;
 	default_mixer_info.deg_min = -30.f;
 	default_mixer_info.k_c = 0.f;
@@ -349,10 +351,13 @@ TSFMU::~TSFMU()
 
 	/* clean up subscribed and published topics */
 	orb_unadvertise(_outputs_pub);
+	orb_unadvertise(_to_safety);
+	orb_unadvertise(_to_mixer_status);
 	orb_unsubscribe(_vehicle_cmd_sub);
 	orb_unsubscribe(_armed_sub);
 	orb_unsubscribe(_param_sub);
 	orb_unsubscribe(_adc_sub);
+
 
 	perf_free(_ctl_latency);
 
@@ -1395,6 +1400,38 @@ TSFMU::start_hp_work()
 	return 0;
 }
 
+void
+TSFMU::print_info()
+{
+	printf("TSFMU INFO:\n");
+
+	printf("PWM_LIMIT: ");
+	switch(_pwm_limit.state){
+	case PWM_LIMIT_STATE_INIT:
+		printf("INIT");
+		break;
+
+	case PWM_LIMIT_STATE_OFF:
+		printf("OFF");
+		break;
+
+	case PWM_LIMIT_STATE_RAMP:
+		printf("RAMP");
+		break;
+
+	case PWM_LIMIT_STATE_ON:
+		printf("ON");
+		break;
+
+	default:
+		printf("ERROR");
+		break;
+	}
+	printf("\n");
+
+
+}
+
 namespace
 {
 
@@ -1703,7 +1740,11 @@ tsfmu_main(int argc, char *argv[])
 
 	if (!strcmp(verb, "info")) {
 		if (g_fmu!= NULL)
+		{
 			printf("TSFMU Object created.\n");
+			g_fmu->print_info();
+
+		}
 		else
 			printf("TSFMU Object not exist.\n");
 		return 0;
