@@ -152,6 +152,7 @@ private:
 
 	static pwm_limit_t	_pwm_limit;
 	static actuator_armed_s	_armed;
+	float _outputs[_max_actuators];
 	uint16_t	_failsafe_pwm[_max_actuators];
 	uint16_t	_disarmed_pwm[_max_actuators];
 	uint16_t	_min_pwm[_max_actuators];
@@ -255,6 +256,7 @@ TSFMU::TSFMU() :
 	_groups_subscribed(0),
 	_poll_fds_num(0),
 	_ts_control_subs{ -1},
+	_outputs{0},
 	_failsafe_pwm{0},
 	_disarmed_pwm{0},
 	_reverse_pwm_mask(0),
@@ -279,7 +281,7 @@ TSFMU::TSFMU() :
 		_min_pwm[i] = PWM_DEFAULT_MIN;
 		_max_pwm[i] = PWM_DEFAULT_MAX;
 		_trim_pwm[i] = PWM_DEFAULT_TRIM;
-		_failsafe_pwm[i] = 900;
+		_failsafe_pwm[i] = 950;
 		_disarmed_pwm[i] = 900;
 	}
 	_num_disarmed_set = 4;
@@ -296,11 +298,12 @@ TSFMU::TSFMU() :
 	default_mixer_info.rads_max = 1000.f;
 	default_mixer_info.deg_max = 30.f;
 	default_mixer_info.deg_min = -30.f;
-	default_mixer_info.k_c = 0.f;
+	default_mixer_info.k_c = -1.f;
 	default_mixer_info.k_w2 = 1.f;
 	default_mixer_info.k_w = 1.f;
 
 	_ts_mixer = new TailsitterMixer(ts_control_callback, (uintptr_t)_ts_controls, &default_mixer_info);
+	_ts_mixer->groups_required(_groups_required);
 
 	// Safely initialize armed flags.
 	_armed.armed = false;
@@ -779,11 +782,11 @@ TSFMU::cycle()
 			float outputs[_max_actuators];
 			num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
-
 			/* disable unused ports by setting their output to NaN */
 			outputs[2] = NAN_VALUE;
 			outputs[3] = NAN_VALUE;
 
+			memcpy(_outputs, outputs, sizeof(outputs));
 
 			uint16_t pwm_limited[_max_actuators];
 
@@ -957,13 +960,6 @@ TSFMU::ts_control_callback(uintptr_t handle,
 
 	input = controls[control_group].control[control_index];
 
-	/* limit control input */
-	if (input > 1.0f) {
-		input = 1.0f;
-
-	} else if (input < -1.0f) {
-		input = -1.0f;
-	}
 
 	/* motor spinup phase - lock throttle to zero */
 	if (_pwm_limit.state == PWM_LIMIT_STATE_RAMP) {
@@ -1417,6 +1413,22 @@ TSFMU::print_info()
 	}
 	printf("\n");
 
+	printf("_throttle_armed: ");
+	if (_throttle_armed) printf("TRUE\n");
+	else printf("FALSE\n");
+
+	printf("Mixer Output: ");
+	for (int i = 0; i < _max_actuators; i++){
+		printf("%.2f\t", (double)_outputs[i]);
+	}
+	printf("\n");
+
+	printf("TS Actuator Controls: ");
+	for (int i = 0; i < 4; i++){
+		printf("%.2f\t", (double)_ts_controls[0].control[i]);
+	}
+
+	printf("\n");
 
 }
 
@@ -1662,18 +1674,18 @@ void
 fake(int argc, char *argv[])
 {
 	if (argc < 5) {
-		errx(1, "fmu fake <roll> <pitch> <yaw> <thrust> (values -100 .. 100)");
+		errx(1, "tsfmu fake <RADS_LEFT> <RADS_RIGHT> <ELV_LEFT_DEG> <ELEVON_RIGHT_DEG> (values -100 .. 100)");
 	}
 
 	ts_actuator_controls_s ac;
 
-	ac.control[0] = strtol(argv[1], 0, 0) / 100.0f;
+	ac.control[0] = strtof(argv[1], 0);
 
-	ac.control[1] = strtol(argv[2], 0, 0) / 100.0f;
+	ac.control[1] = strtof(argv[2], 0);
 
-	ac.control[2] = strtol(argv[3], 0, 0) / 100.0f;
+	ac.control[2] = strtof(argv[3], 0);
 
-	ac.control[3] = strtol(argv[4], 0, 0) / 100.0f;
+	ac.control[3] = strtof(argv[4], 0);
 
 	orb_advert_t handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
 
@@ -1687,6 +1699,8 @@ fake(int argc, char *argv[])
 
 	aa.armed = true;
 	aa.lockdown = false;
+	aa.manual_lockdown = false;
+	aa.force_failsafe = false;
 
 	handle = orb_advertise(ORB_ID(actuator_armed), &aa);
 
