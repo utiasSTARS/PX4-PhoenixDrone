@@ -42,7 +42,7 @@ float constrain(float val, float min, float max)
 float normalize(float val, float val_min, float val_max, float nor_min, float nor_max)
 {
 	if (!(val >= val_min && val <= val_max && nor_min < nor_max)) return NAN_VALUE;
-	return nor_min * (val - val_min)/(val_max - val_min) + nor_max * (val_max - val)/(val_max - val_min);
+	return nor_max * (val - val_min)/(val_max - val_min) + nor_min * (val_max - val)/(val_max - val_min);
 }
 
 } // anonymous namespace
@@ -115,11 +115,14 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max);
 	float elv_right = constrain(get_control(0, 3), _mixer_info.deg_min, _mixer_info.deg_max);
 
-	outputs[0] = _mixer_info.k_w2 * rads_left * rads_left
+	float mot_left  = _mixer_info.k_w2 * rads_left * rads_left
 				+ _mixer_info.k_w * rads_left + _mixer_info.k_c;
 
-	outputs[1] = _mixer_info.k_w2 * rads_right * rads_right
+	float mot_right = _mixer_info.k_w2 * rads_right * rads_right
 				+ _mixer_info.k_w * rads_right + _mixer_info.k_c;
+
+	outputs[0] = constrain(mot_left, -1.f, 1.f);
+	outputs[1] = constrain(mot_right, -1.f, 1.f);
 
 	outputs[2] = 0;//Not being used, will be set to NaN in tsfmu cycle
 	outputs[3] = 0;
