@@ -277,6 +277,7 @@ TSFMU::TSFMU() :
 	_pwm_mask = 0x33;//Enable Channel 1,2,5,6
 	_pwm_initialized = false;
 
+
 	for (unsigned i = 0; i < _max_actuators; i++) {
 		_min_pwm[i] = PWM_DEFAULT_MIN;
 		_max_pwm[i] = PWM_DEFAULT_MAX;
@@ -391,6 +392,10 @@ TSFMU::init()
 	_safety_disabled = circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY);
 
 	work_start();
+
+	/*Input Capture settings for reading motor RPM pulses */
+	up_input_capture_set(2, Rising, 0, &capture_trampoline, this);
+	up_input_capture_set(3, Rising, 0, &capture_trampoline, this);
 
 	return OK;
 }
@@ -993,6 +998,11 @@ TSFMU::ioctl(file *filp, int cmd, unsigned long arg)
 {
 	int ret = pwm_ioctl(filp, cmd, arg);
 
+	if (ret != -ENOTTY) {
+		return ret;
+	}
+
+	ret = capture_ioctl(filp, cmd, arg);
 
 	/* if nobody wants it, let CDev have it */
 	if (ret == -ENOTTY) {
@@ -1336,6 +1346,105 @@ TSFMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 
 	unlock();
 
+	return ret;
+}
+
+int
+TSFMU::capture_ioctl(struct file *filp, int cmd, unsigned long arg)
+{
+	int	ret = -EINVAL;
+
+	lock();
+
+	input_capture_config_t *pconfig = 0;
+
+	input_capture_stats_t *stats = (input_capture_stats_t *)arg;
+
+	pconfig = (input_capture_config_t *)arg;
+
+	switch (cmd) {
+
+	case INPUT_CAP_SET:
+		if (pconfig) {
+			ret =  up_input_capture_set(pconfig->channel, pconfig->edge, pconfig->filter,
+						    pconfig->callback, pconfig->context);
+		}
+
+		break;
+
+	case INPUT_CAP_SET_CALLBACK:
+		if (pconfig) {
+			ret =  up_input_capture_set_callback(pconfig->channel, pconfig->callback, pconfig->context);
+		}
+
+		break;
+
+	case INPUT_CAP_GET_CALLBACK:
+		if (pconfig) {
+			ret =  up_input_capture_get_callback(pconfig->channel, &pconfig->callback, &pconfig->context);
+		}
+
+		break;
+
+	case INPUT_CAP_GET_STATS:
+		if (arg) {
+			ret =  up_input_capture_get_stats(stats->chan_in_edges_out, stats, false);
+		}
+
+		break;
+
+	case INPUT_CAP_GET_CLR_STATS:
+		if (arg) {
+			ret =  up_input_capture_get_stats(stats->chan_in_edges_out, stats, true);
+		}
+
+		break;
+
+	case INPUT_CAP_SET_EDGE:
+		if (pconfig) {
+			ret =  up_input_capture_set_trigger(pconfig->channel, pconfig->edge);
+		}
+
+		break;
+
+	case INPUT_CAP_GET_EDGE:
+		if (pconfig) {
+			ret =  up_input_capture_get_trigger(pconfig->channel, &pconfig->edge);
+		}
+
+		break;
+
+	case INPUT_CAP_SET_FILTER:
+		if (pconfig) {
+			ret =  up_input_capture_set_filter(pconfig->channel, pconfig->filter);
+		}
+
+		break;
+
+	case INPUT_CAP_GET_FILTER:
+		if (pconfig) {
+			ret =  up_input_capture_get_filter(pconfig->channel, &pconfig->filter);
+		}
+
+		break;
+
+	case INPUT_CAP_GET_COUNT:
+		ret = OK;
+		*(unsigned *)arg = 2;
+
+
+		break;
+
+	case INPUT_CAP_SET_COUNT:
+		ret = OK;
+		break;
+
+	default:
+		ret = -ENOTTY;
+		break;
+	}
+
+	unlock();
 	return ret;
 }
 
