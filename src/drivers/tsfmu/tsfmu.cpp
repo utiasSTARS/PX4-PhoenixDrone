@@ -65,7 +65,9 @@
 #define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 #define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)
 #define CYCLE_COUNT 10			/* safety switch must be held for 1 second to activate */
-
+#define NUM_POLES 7
+#define NUM_SYNC_PER_CYCLE 3
+#define PI 3.14159f
 /*
  * Define the various LED flash sequences for each system state.
  */
@@ -78,6 +80,8 @@
 #if !defined(BOARD_HAS_PWM)
 #  error "board_config.h needs to define BOARD_HAS_PWM"
 #endif
+
+
 class TSFMU : public device::CDev
 {
 public:
@@ -168,6 +172,16 @@ private:
 
 	float _mot_t_max;	// maximum rise time for motor (slew rate limiting)
 	float _thr_mdl_fac;	// thrust to pwm modelling factor
+
+	/* Motor RPM Pulse Detection */
+	volatile uint64_t _last_edge_l;
+	volatile uint64_t _last_edge_r;
+	volatile uint64_t _current_edge_l;
+	volatile uint64_t _current_edge_r;
+	volatile float _timeDiff_l;
+	volatile float _timeDiff_r;
+	volatile float _rads_l;
+	volatile float _rads_r;
 
 	perf_counter_t	_ctl_latency;
 
@@ -268,6 +282,14 @@ TSFMU::TSFMU() :
 	_to_mixer_status(nullptr),
 	_mot_t_max(0.0f),
 	_thr_mdl_fac(0.0f),
+	_last_edge_l(0),
+	_last_edge_r(0),
+	_current_edge_l(0),
+	_current_edge_r(0),
+	_timeDiff_l(0.f),
+	_timeDiff_r(0.f),
+	_rads_l(0.f),
+	_rads_r(0.f),
 	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat"))
 {
 	/* force output rates for TS on PixRacer */
@@ -622,7 +644,14 @@ void
 TSFMU::capture_callback(uint32_t chan_index,
 			 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
-	fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
+	if (chan_index == 2){
+		//_current_edge_l = edge_time;
+		//_timeDiff = (float)(_current_edge_l - _last_edge);
+		//_last_edge = _current_edge;
+		//_rads_1 = 8.f * 60.f * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff);//RPM
+		//fprintf(stdout, "RPM1: %.1f\n", (double)_rads_1);
+		fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
+	}
 }
 
 
@@ -1538,6 +1567,8 @@ TSFMU::print_info()
 	}
 
 	printf("\n");
+	printf("RPM-L: %.2f\n", (double)(_rads_l * 60.f / (2.f*PI)));
+	printf("RPM-R: %.2f\n", (double)(_rads_r * 60.f / (2.f*PI)));
 
 }
 
