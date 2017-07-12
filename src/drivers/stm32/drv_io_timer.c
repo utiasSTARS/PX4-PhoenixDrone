@@ -644,7 +644,7 @@ int io_timer_set_enable(bool state, io_timer_channel_mode_t mode, io_timer_chann
 	irqstate_t flags = px4_enter_critical_section();
 
 	for (unsigned actions = 0; actions < arraySize(action_cache); actions++) {
-		if (action_cache[actions].base != 0){
+		if (action_cache[actions].base != 0) {
 			uint32_t rvalue = _REG32(action_cache[actions].base, STM32_GTIM_CCER_OFFSET);
 			rvalue &= ~action_cache[actions].ccer_clearbits;
 			rvalue |= action_cache[actions].ccer_setbits;
@@ -655,7 +655,6 @@ int io_timer_set_enable(bool state, io_timer_channel_mode_t mode, io_timer_chann
 			rvalue &= ~action_cache[actions].dier_clearbits;
 			rvalue |= action_cache[actions].dier_setbits;
 			_REG32(action_cache[actions].base, STM32_GTIM_DIER_OFFSET) = rvalue;
-
 
 			/* Any On ?*/
 
