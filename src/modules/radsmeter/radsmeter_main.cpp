@@ -21,7 +21,7 @@
 /****************
  * Pin Definition
  */
-#define GPIO_LMOTOR_RPM_FB (GPIO_INPUT|GPIO_FLOAT|GPIO_PORTE|GPIO_PIN2)
+#define GPIO_LMOTOR_RPM_FB (GPIO_INPUT|GPIO_PULLDOWN|GPIO_PORTE|GPIO_PIN11)
 
 /***************
  * Parameters
