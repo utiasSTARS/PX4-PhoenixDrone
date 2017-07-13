@@ -8,7 +8,7 @@
 
 
 #include <px4_config.h>
-
+#include <px4_tasks.h>
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -52,6 +52,7 @@
 #include <uORB/topics/ts_actuator_controls.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/actuator_armed.h>
+#include <uORB/topics/esc_rads.h>
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/safety.h>
@@ -65,9 +66,15 @@
 #define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 #define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)
 #define CYCLE_COUNT 10			/* safety switch must be held for 1 second to activate */
+#define RPM_CH_LEFT 2
+#define RPM_CH_RIGHT 3
 #define NUM_POLES 7
 #define NUM_SYNC_PER_CYCLE 3
+#define TIMER_PSC 8
 #define PI 3.14159f
+#define RADS_FILTER_CONSTANT 0.8f
+#define TIMEOUT_MS 200
+#define CH_TIMEOUT_MS 200
 /*
  * Define the various LED flash sequences for each system state.
  */
@@ -174,14 +181,20 @@ private:
 	float _thr_mdl_fac;	// thrust to pwm modelling factor
 
 	/* Motor RPM Pulse Detection */
+	bool _rads_task_should_exit;
+	int _rads_task;
+	sem_t _sem_timer;
 	volatile uint64_t _last_edge_l;
 	volatile uint64_t _last_edge_r;
 	volatile uint64_t _current_edge_l;
 	volatile uint64_t _current_edge_r;
 	volatile float _timeDiff_l;
 	volatile float _timeDiff_r;
+	volatile float _timeDiff_l_fil;
+	volatile float _timeDiff_r_fil;
 	volatile float _rads_l;
 	volatile float _rads_r;
+	orb_advert_t	_rads_pub;
 
 	perf_counter_t	_ctl_latency;
 
@@ -199,6 +212,9 @@ private:
 					 uint8_t control_group,
 					 uint8_t control_index,
 					 float &input);
+	void 		reset_rads_meas(int ch);
+	static void rads_task_main_trampoline(int argc, char *argv[]);
+	void 		rads_task_main(void);
 	void		capture_callback(uint32_t chan_index,
 					 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow);
 	void		subscribe();
@@ -282,14 +298,20 @@ TSFMU::TSFMU() :
 	_to_mixer_status(nullptr),
 	_mot_t_max(0.0f),
 	_thr_mdl_fac(0.0f),
+	_rads_task_should_exit(false),
+	_rads_task(-1),
+	_sem_timer{0},
 	_last_edge_l(0),
 	_last_edge_r(0),
 	_current_edge_l(0),
 	_current_edge_r(0),
 	_timeDiff_l(0.f),
 	_timeDiff_r(0.f),
+	_timeDiff_l_fil(0.f),
+	_timeDiff_r_fil(0.f),
 	_rads_l(0.f),
 	_rads_r(0.f),
+	_rads_pub(nullptr),
 	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat"))
 {
 	/* force output rates for TS on PixRacer */
@@ -344,6 +366,8 @@ TSFMU::TSFMU() :
 
 	/* only enable this during development */
 	_debug_enabled = false;
+
+	sem_init(&_sem_timer, 0, 0);
 }
 
 TSFMU::~TSFMU()
@@ -362,6 +386,24 @@ TSFMU::~TSFMU()
 		} while (_initialized && i > 0);
 	}
 
+	if (_rads_task != -1) {
+		_rads_task_should_exit = true;
+
+		/* wait for a second for the task to quit at our request */
+		unsigned i = 0;
+
+		do {
+			/* wait 20ms */
+			usleep(20000);
+
+			/* if we have given up, kill it */
+			if (++i > 50) {
+				px4_task_delete(_rads_task);
+				break;
+			}
+		} while (_rads_task != -1);
+	}
+
 	/* clean up the alternate device node */
 	unregister_class_devname(PWM_OUTPUT_BASE_DEVICE_PATH, _class_instance);
 
@@ -369,6 +411,7 @@ TSFMU::~TSFMU()
 	orb_unadvertise(_outputs_pub);
 	orb_unadvertise(_to_safety);
 	orb_unadvertise(_to_mixer_status);
+	orb_unadvertise(_rads_pub);
 	orb_unsubscribe(_vehicle_cmd_sub);
 	orb_unsubscribe(_armed_sub);
 	orb_unsubscribe(_param_sub);
@@ -416,8 +459,8 @@ TSFMU::init()
 	work_start();
 
 	/*Input Capture settings for reading motor RPM pulses */
-	up_input_capture_set(2, Rising, 0, &capture_trampoline, this);
-	up_input_capture_set(3, Rising, 0, &capture_trampoline, this);
+	up_input_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
+	up_input_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
 
 	return OK;
 }
@@ -620,6 +663,21 @@ TSFMU::publish_pwm_outputs(uint16_t *values, size_t numvalues)
 void
 TSFMU::work_start()
 {
+	ASSERT(_rads_task == -1);
+
+	/* start radsmeter task */
+	_rads_task = px4_task_spawn_cmd("radsmeter",
+					SCHED_DEFAULT,
+					SCHED_PRIORITY_MAX - 1,
+					1000,
+					(px4_main_t)&TSFMU::rads_task_main_trampoline,
+					nullptr);
+
+	if (_rads_task < 0) {
+		warn("task start failed");
+	}
+	else PX4_INFO("radsmeter started.");
+
 	/* schedule a cycle to start things */
 	work_queue(HPWORK, &_work, (worker_t)&TSFMU::cycle_trampoline, this, 0);
 }
@@ -630,6 +688,106 @@ TSFMU::cycle_trampoline(void *arg)
 	TSFMU *dev = reinterpret_cast<TSFMU *>(arg);
 
 	dev->cycle();
+}
+
+void
+TSFMU::reset_rads_meas(int ch)
+{
+	if (ch == RPM_CH_LEFT)
+	{
+		_last_edge_l = 0;
+		_current_edge_l = 0;
+		_timeDiff_l = 0.f;
+		_timeDiff_l_fil = 0.f;
+		_rads_l = 0.f;
+		printf("reset left!\n");
+	}
+	if (ch == RPM_CH_RIGHT)
+	{
+		_last_edge_r = 0;
+		_current_edge_r = 0;
+		_timeDiff_r = 0.f;
+		_timeDiff_r_fil = 0.f;
+		_rads_r = 0.f;
+		printf("reset right!\n");
+	}
+}
+
+void
+TSFMU::rads_task_main_trampoline(int argc, char *argv[])
+{
+	g_fmu->rads_task_main();
+}
+
+void
+TSFMU::rads_task_main()
+{
+	struct timespec time;
+	struct esc_rads_s esc_rads_msg;
+	while(!_rads_task_should_exit) {
+		(void) clock_gettime (CLOCK_REALTIME, &time);
+		time.tv_nsec += TIMEOUT_MS * 1000 * 1000;
+		if (time.tv_nsec >= 1000 * 1000 * 1000)
+		{
+			time.tv_sec++;
+			time.tv_nsec -= 1000 * 1000 * 1000;
+		}
+		int ret = sem_timedwait (&_sem_timer, &time);
+
+		if (ret == 0)
+		{
+			hrt_abstime now = hrt_absolute_time();
+			/*Check if any timeDiff is invalid */
+			//if ((now - _current_edge_l) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_LEFT);
+			//if ((now - _current_edge_r) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_RIGHT);
+
+			esc_rads_msg.timestamp = now;
+			_rads_l = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil);
+			esc_rads_msg.rads_filtered[0] = _rads_l;
+			esc_rads_msg.rads_raw[0] = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l);
+
+			_rads_r = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil);
+			esc_rads_msg.rads_filtered[1] = _rads_r;
+			esc_rads_msg.rads_raw[1] = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r);
+
+			esc_rads_msg.rads_filtered[2] = 0;
+			esc_rads_msg.rads_raw[2] = 0;
+			esc_rads_msg.rads_filtered[3] = 0;
+			esc_rads_msg.rads_raw[3] = 0;
+		}
+		/* timeout */
+		else
+		{
+			printf("semaphore timeout!\n");
+			reset_rads_meas(RPM_CH_LEFT);
+			reset_rads_meas(RPM_CH_RIGHT);
+			esc_rads_msg.timestamp = hrt_absolute_time();
+			esc_rads_msg.rads_filtered[0] = 0.0f;
+			esc_rads_msg.rads_raw[0] = 0.0f;
+			esc_rads_msg.rads_filtered[1] = 0.0f;
+			esc_rads_msg.rads_raw[1] = 0.0f;
+			esc_rads_msg.rads_filtered[2] = 0;
+			esc_rads_msg.rads_raw[2] = 0;
+			esc_rads_msg.rads_filtered[3] = 0;
+			esc_rads_msg.rads_raw[3] = 0;
+		}
+		if(esc_rads_msg.rads_raw[0] < 0 || esc_rads_msg.rads_raw[0] > 10000.f){
+			esc_rads_msg.rads_raw[0] = 0;
+			printf("esc rads 0 not normal.\n");
+		}
+		if(esc_rads_msg.rads_raw[1] < 0 || esc_rads_msg.rads_raw[1] > 10000.f){
+			esc_rads_msg.rads_raw[1] = 0;
+			printf("esc rads 1 not normal.\n");
+		}
+		if (_rads_pub != nullptr) {
+			orb_publish(ORB_ID(esc_rads), _rads_pub, &esc_rads_msg);
+
+		} else {
+			_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
+		}
+	}
+
+	_rads_task = -1;
 }
 
 void
@@ -644,14 +802,48 @@ void
 TSFMU::capture_callback(uint32_t chan_index,
 			 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
-	if (chan_index == 2){
-		//_current_edge_l = edge_time;
-		//_timeDiff = (float)(_current_edge_l - _last_edge);
-		//_last_edge = _current_edge;
+	bool valid = true;
+	if (overflow) printf("overflow!\n");
+	//if (!edge_state) printf("capture detected negative level.\n");
+	if (chan_index == RPM_CH_LEFT){
+		_current_edge_l = edge_time;
+
+		if ((_current_edge_l  - _last_edge_l) > CH_TIMEOUT_MS * 1000){
+			valid = false;
+			printf("left timediff timeout\n");
+		}
+		else{
+			_timeDiff_l = (float)(_current_edge_l - _last_edge_l);
+		}
+		_last_edge_l = edge_time;
+		_timeDiff_l_fil = RADS_FILTER_CONSTANT * _timeDiff_l_fil +
+				(1 - RADS_FILTER_CONSTANT) * _timeDiff_l;
 		//_rads_1 = 8.f * 60.f * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff);//RPM
 		//fprintf(stdout, "RPM1: %.1f\n", (double)_rads_1);
-		fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
+
+		//fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
 	}
+
+	if (chan_index == RPM_CH_RIGHT){
+		_current_edge_r = edge_time;
+
+		if ((_current_edge_r - _last_edge_r) > CH_TIMEOUT_MS * 1000){
+			valid = false;
+			printf("right timediff timeout\n");
+		}
+		else{
+			_timeDiff_r = (float)(_current_edge_r - _last_edge_r);
+		}
+		_last_edge_r = edge_time;
+		_timeDiff_r_fil = RADS_FILTER_CONSTANT * _timeDiff_r_fil +
+				(1 - RADS_FILTER_CONSTANT) * _timeDiff_r;
+
+	}
+
+	/* Signal the rads thread to continue execuation */
+	int svalue;
+	sem_getvalue (&_sem_timer, &svalue);
+	if (valid && svalue < 0) sem_post(&_sem_timer);
 }
 
 
