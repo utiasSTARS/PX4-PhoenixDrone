@@ -74,7 +74,8 @@
 #define PI 3.14159f
 #define RADS_FILTER_CONSTANT 0.8f
 #define TIMEOUT_MS 200
-#define CH_TIMEOUT_MS 200
+#define CH_TIMEOUT_MS 1000
+#define MED_FIL_ENTRY 5
 /*
  * Define the various LED flash sequences for each system state.
  */
@@ -188,12 +189,18 @@ private:
 	volatile uint64_t _last_edge_r;
 	volatile uint64_t _current_edge_l;
 	volatile uint64_t _current_edge_r;
-	volatile float _timeDiff_l;
-	volatile float _timeDiff_r;
-	volatile float _timeDiff_l_fil;
-	volatile float _timeDiff_r_fil;
+	volatile uint8_t _timeIdx_l;
+	volatile uint8_t _timeIdx_r;
+	volatile uint64_t _time_l[MED_FIL_ENTRY];
+	volatile uint64_t _time_r[MED_FIL_ENTRY];
+	volatile uint64_t _timeDiff_l;
+	volatile uint64_t _timeDiff_r;
+	volatile uint64_t _timeDiff_l_fil;
+	volatile uint64_t _timeDiff_r_fil;
 	volatile float _rads_l;
 	volatile float _rads_r;
+	volatile float _rads_l_raw;
+	volatile float _rads_r_raw;
 	orb_advert_t	_rads_pub;
 
 	perf_counter_t	_ctl_latency;
@@ -224,6 +231,7 @@ private:
 	void		publish_pwm_outputs(uint16_t *values, size_t numvalues);
 	void		update_pwm_out_state(bool on);
 	void		pwm_output_set(unsigned i, unsigned value);
+	uint64_t	check_anomaly(volatile uint64_t * array, unsigned size, uint64_t newest);
 
 	struct GPIOConfig {
 		uint32_t	input;
@@ -305,12 +313,18 @@ TSFMU::TSFMU() :
 	_last_edge_r(0),
 	_current_edge_l(0),
 	_current_edge_r(0),
-	_timeDiff_l(0.f),
-	_timeDiff_r(0.f),
-	_timeDiff_l_fil(0.f),
-	_timeDiff_r_fil(0.f),
+	_timeIdx_l(0),
+	_timeIdx_r(0),
+	_time_l{0},
+	_time_r{0},
+	_timeDiff_l(0),
+	_timeDiff_r(0),
+	_timeDiff_l_fil(0),
+	_timeDiff_r_fil(0),
 	_rads_l(0.f),
 	_rads_r(0.f),
+	_rads_l_raw(0.f),
+	_rads_r_raw(0.f),
 	_rads_pub(nullptr),
 	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat"))
 {
@@ -697,18 +711,22 @@ TSFMU::reset_rads_meas(int ch)
 	{
 		_last_edge_l = 0;
 		_current_edge_l = 0;
-		_timeDiff_l = 0.f;
-		_timeDiff_l_fil = 0.f;
+		_timeDiff_l = 0;
+		_timeDiff_l_fil = 0;
+		for(unsigned i = 0; i < MED_FIL_ENTRY; i ++) _time_l[i] = 0;
 		_rads_l = 0.f;
+		_rads_l_raw = 0.f;
 		printf("reset left!\n");
 	}
 	if (ch == RPM_CH_RIGHT)
 	{
 		_last_edge_r = 0;
 		_current_edge_r = 0;
-		_timeDiff_r = 0.f;
-		_timeDiff_r_fil = 0.f;
+		_timeDiff_r = 0;
+		_timeDiff_r_fil = 0;
+		for(unsigned i = 0; i < MED_FIL_ENTRY; i ++) _time_r[i] = 0;
 		_rads_r = 0.f;
+		_rads_r_raw = 0.f;
 		printf("reset right!\n");
 	}
 }
@@ -733,27 +751,18 @@ TSFMU::rads_task_main()
 			time.tv_nsec -= 1000 * 1000 * 1000;
 		}
 		int ret = sem_timedwait (&_sem_timer, &time);
-
+		hrt_abstime now = hrt_absolute_time();
 		if (ret == 0)
 		{
-			hrt_abstime now = hrt_absolute_time();
 			/*Check if any timeDiff is invalid */
-			//if ((now - _current_edge_l) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_LEFT);
-			//if ((now - _current_edge_r) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_RIGHT);
+			if ((now - _current_edge_l) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_LEFT);
+			if ((now - _current_edge_r) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_RIGHT);
 
-			esc_rads_msg.timestamp = now;
-			_rads_l = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil);
-			esc_rads_msg.rads_filtered[0] = _rads_l;
-			esc_rads_msg.rads_raw[0] = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l);
 
-			_rads_r = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil);
-			esc_rads_msg.rads_filtered[1] = _rads_r;
-			esc_rads_msg.rads_raw[1] = TIMER_PSC * PI * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r);
-
-			esc_rads_msg.rads_filtered[2] = 0;
-			esc_rads_msg.rads_raw[2] = 0;
-			esc_rads_msg.rads_filtered[3] = 0;
-			esc_rads_msg.rads_raw[3] = 0;
+			_rads_l = _timeDiff_l_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
+			_rads_l_raw = _timeDiff_l ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l) : 0.f;
+			_rads_r = _timeDiff_r_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
+			_rads_r_raw = _timeDiff_r ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r) : 0.f;
 		}
 		/* timeout */
 		else
@@ -761,16 +770,17 @@ TSFMU::rads_task_main()
 			printf("semaphore timeout!\n");
 			reset_rads_meas(RPM_CH_LEFT);
 			reset_rads_meas(RPM_CH_RIGHT);
-			esc_rads_msg.timestamp = hrt_absolute_time();
-			esc_rads_msg.rads_filtered[0] = 0.0f;
-			esc_rads_msg.rads_raw[0] = 0.0f;
-			esc_rads_msg.rads_filtered[1] = 0.0f;
-			esc_rads_msg.rads_raw[1] = 0.0f;
-			esc_rads_msg.rads_filtered[2] = 0;
-			esc_rads_msg.rads_raw[2] = 0;
-			esc_rads_msg.rads_filtered[3] = 0;
-			esc_rads_msg.rads_raw[3] = 0;
 		}
+		esc_rads_msg.timestamp = now;
+		esc_rads_msg.rads_filtered[0] = _rads_l;
+		esc_rads_msg.rads_raw[0] = _rads_l_raw;
+		esc_rads_msg.rads_filtered[1] = _rads_r;
+		esc_rads_msg.rads_raw[1] = _rads_r_raw;
+		esc_rads_msg.rads_filtered[2] = 0;
+		esc_rads_msg.rads_raw[2] = 0;
+		esc_rads_msg.rads_filtered[3] = 0;
+		esc_rads_msg.rads_raw[3] = 0;
+
 		if(esc_rads_msg.rads_raw[0] < 0 || esc_rads_msg.rads_raw[0] > 10000.f){
 			esc_rads_msg.rads_raw[0] = 0;
 			printf("esc rads 0 not normal.\n");
@@ -802,26 +812,27 @@ void
 TSFMU::capture_callback(uint32_t chan_index,
 			 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
+	//fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
 	bool valid = true;
-	if (overflow) printf("overflow!\n");
-	//if (!edge_state) printf("capture detected negative level.\n");
+	if (overflow) warnx("overflow!");
 	if (chan_index == RPM_CH_LEFT){
 		_current_edge_l = edge_time;
-
 		if ((_current_edge_l  - _last_edge_l) > CH_TIMEOUT_MS * 1000){
 			valid = false;
 			printf("left timediff timeout\n");
 		}
 		else{
-			_timeDiff_l = (float)(_current_edge_l - _last_edge_l);
+			_timeDiff_l = (_current_edge_l - _last_edge_l);
+
+			_time_l[_timeIdx_l] = _timeDiff_l;
+			_timeIdx_l = (_timeIdx_l + 1) % MED_FIL_ENTRY;
 		}
 		_last_edge_l = edge_time;
-		_timeDiff_l_fil = RADS_FILTER_CONSTANT * _timeDiff_l_fil +
-				(1 - RADS_FILTER_CONSTANT) * _timeDiff_l;
-		//_rads_1 = 8.f * 60.f * 1000000.f / (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff);//RPM
-		//fprintf(stdout, "RPM1: %.1f\n", (double)_rads_1);
+		uint64_t timediff_valid = check_anomaly(_time_l, MED_FIL_ENTRY, edge_time);
 
-		//fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
+		_timeDiff_l_fil = RADS_FILTER_CONSTANT * _timeDiff_l_fil +
+				(1 - RADS_FILTER_CONSTANT) * timediff_valid;
+
 	}
 
 	if (chan_index == RPM_CH_RIGHT){
@@ -832,11 +843,14 @@ TSFMU::capture_callback(uint32_t chan_index,
 			printf("right timediff timeout\n");
 		}
 		else{
-			_timeDiff_r = (float)(_current_edge_r - _last_edge_r);
+			_timeDiff_r = (_current_edge_r - _last_edge_r);
+			_time_r[_timeIdx_r] = _timeDiff_r;
+			_timeIdx_r = (_timeIdx_r + 1) % MED_FIL_ENTRY;
 		}
 		_last_edge_r = edge_time;
+		uint64_t timediff_valid = check_anomaly(_time_r, MED_FIL_ENTRY, edge_time);
 		_timeDiff_r_fil = RADS_FILTER_CONSTANT * _timeDiff_r_fil +
-				(1 - RADS_FILTER_CONSTANT) * _timeDiff_r;
+				(1 - RADS_FILTER_CONSTANT) * timediff_valid;
 
 	}
 
@@ -846,7 +860,24 @@ TSFMU::capture_callback(uint32_t chan_index,
 	if (valid && svalue < 0) sem_post(&_sem_timer);
 }
 
-
+//Bubble sort implementation of finding median, timer input capture tends to
+//miss edges or overcount edges
+uint64_t
+TSFMU::check_anomaly(volatile uint64_t* array, unsigned size, uint64_t newest){
+	uint64_t sorted[size];
+	for (unsigned i = 0; i < size; i ++) sorted[i] = array[i];
+	for (unsigned i = size - 1; i > 0; --i){
+		for (unsigned j = 0; j < i; ++j){
+			if (sorted[j] > sorted[j + 1]) {
+				uint64_t temp = sorted[j];
+				sorted[j] = sorted[j + 1];
+				sorted[j + 1] = temp;
+			}
+		}
+	}
+	uint64_t median = sorted[size/2];
+	return (newest > 1.2 * median || newest < 0.8 * median) ? median : newest;
+}
 
 void
 TSFMU::pwm_output_set(unsigned i, unsigned value)
