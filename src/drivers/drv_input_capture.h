@@ -175,8 +175,7 @@ typedef struct input_capture_config_t {
  *
  */
 
-__EXPORT int rads_pulse_capture_set(unsigned channel, input_capture_edge edge, capture_filter_t filter,
-		 	 	  capture_callback_t callback, void *context);
+
 __EXPORT int up_input_capture_set(unsigned channel, input_capture_edge edge, capture_filter_t filter,
 				  capture_callback_t callback, void *context);
 

@@ -89,32 +89,12 @@
 #define GTIM_SR_CCOF (GTIM_SR_CC4OF|GTIM_SR_CC3OF|GTIM_SR_CC2OF|GTIM_SR_CC1OF)
 
 static input_capture_stats_t channel_stats[MAX_TIMER_IO_CHANNELS];
-static uint64_t last_time;
 
 static struct channel_handler_entry {
 	capture_callback_t callback;
 	void			  *context;
 } channel_handlers[MAX_TIMER_IO_CHANNELS];
 
-static void rpm_pulse_capture_handler(void *context, const io_timers_t *timer, uint32_t chan_index,
-				       const timer_io_channels_t *chan,
-				       hrt_abstime isrs_time , uint16_t isrs_rcnt)
-{
-	uint16_t capture = _REG32(timer->base, chan->ccr_offset);
-	//channel_stats[chan_index].last_edge = px4_arch_gpioread(chan->gpio_in);
-
-	if (isrs_rcnt >= capture)	last_time = isrs_time - (isrs_rcnt - capture);
-	else if (capture - isrs_rcnt > 5) {
-		//printf("hrt: %llu\n", isrs_time);
-		//printf("isrs_rcnt: %x\t capture: %x\n", isrs_rcnt, capture);
-		last_time = isrs_time - (isrs_rcnt + 2000 - capture);
-	}
-	else last_time = isrs_time;
-
-	uint32_t overflow = _REG32(timer->base, STM32_GTIM_SR_OFFSET) & chan->masks & GTIM_SR_CCOF;
-
-	channel_handlers[chan_index].callback(channel_handlers[chan_index].context, chan_index, last_time, 1, overflow);
-}
 
 static void input_capture_chan_handler(void *context, const io_timers_t *timer, uint32_t chan_index,
 				       const timer_io_channels_t *chan,
@@ -123,13 +103,15 @@ static void input_capture_chan_handler(void *context, const io_timers_t *timer, 
 	uint16_t capture = _REG32(timer->base, chan->ccr_offset);
 	channel_stats[chan_index].last_edge = px4_arch_gpioread(chan->gpio_in);
 
-	if ((isrs_rcnt - capture) > channel_stats[chan_index].latnecy) {
+	if (isrs_rcnt > capture && (isrs_rcnt - capture) > channel_stats[chan_index].latnecy) {
 		channel_stats[chan_index].latnecy = (isrs_rcnt - capture);
 	}
 
 	channel_stats[chan_index].chan_in_edges_out++;
 	if (isrs_rcnt >= capture)	channel_stats[chan_index].last_time = isrs_time - (isrs_rcnt - capture);
-	else channel_stats[chan_index].last_time = isrs_time - (isrs_rcnt + 2000 - capture);
+	else if (capture - isrs_rcnt > 5) channel_stats[chan_index].last_time = isrs_time - (isrs_rcnt + 2000 - capture);
+	else channel_stats[chan_index].last_time = isrs_time;
+
 	uint32_t overflow = _REG32(timer->base, STM32_GTIM_SR_OFFSET) & chan->masks & GTIM_SR_CCOF;
 
 	if (overflow) {
@@ -159,53 +141,7 @@ static void input_capture_unbind(unsigned channel)
 	input_capture_bind(channel, NULL, NULL);
 }
 
-int rads_pulse_capture_set(unsigned channel, input_capture_edge edge, capture_filter_t filter,
-		 capture_callback_t callback, void *context)
-{
-if (filter > GTIM_CCMR1_IC1F_MASK) {
-	return -EINVAL;
-}
 
-if (edge > Both) {
-	return -EINVAL;
-}
-
-int rv = io_timer_validate_channel_index(channel);
-
-if (rv == 0) {
-	if (edge == Disabled) {
-
-		io_timer_set_enable(false, IOTimerChanMode_Capture, 1 << channel);
-		input_capture_unbind(channel);
-
-	} else {
-
-		if (-EBUSY == io_timer_is_channel_free(channel)) {
-			io_timer_free_channel(channel);
-		}
-
-		input_capture_bind(channel, callback, context);
-
-		rv = io_timer_channel_init(channel, IOTimerChanMode_Capture, rpm_pulse_capture_handler, context);
-
-		if (rv != 0) {
-			return rv;
-		}
-
-		rv = up_input_capture_set_filter(channel, filter);
-
-		if (rv == 0) {
-			rv = up_input_capture_set_trigger(channel, edge);
-
-			if (rv == 0) {
-				rv = io_timer_set_enable(true, IOTimerChanMode_Capture, 1 << channel);
-			}
-		}
-	}
-}
-
-return rv;
-}
 
 int up_input_capture_set(unsigned channel, input_capture_edge edge, capture_filter_t filter,
 			 capture_callback_t callback, void *context)

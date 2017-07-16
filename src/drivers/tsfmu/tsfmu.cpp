@@ -485,11 +485,9 @@ TSFMU::init()
 	work_start();
 
 	/*Input Capture settings for reading motor RPM pulses */
-	//up_input_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
-	//up_input_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
+	up_input_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
+	up_input_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
 
-	rads_pulse_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
-	rads_pulse_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
 
 	return OK;
 }

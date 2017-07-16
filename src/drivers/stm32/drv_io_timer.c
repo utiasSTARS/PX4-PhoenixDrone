@@ -124,38 +124,6 @@ static struct channel_handler_entry {
 	void			  *context;
 } channel_handlers[MAX_TIMER_IO_CHANNELS];
 
-static int io_timer_handler_lite(void){
-	uint16_t count = rCNT(0);
-	hrt_abstime now = hrt_absolute_time();
-
-	/* What is pending and enabled? */
-
-	uint16_t statusr = rSR(0);
-	//uint16_t enabled =  rDIER(0) & GTIM_SR_CCIF;
-
-	for (unsigned chan_index = 2; chan_index <= 3; chan_index++) {
-
-		uint16_t masks = timer_io_channels[chan_index].masks;
-
-
-		if (statusr & masks & GTIM_SR_CCIF) {
-
-			/* Call the client to read the CCxR etc and clear the CCxIF */
-
-			channel_handlers[chan_index].callback(channel_handlers[chan_index].context, &io_timers[0],
-								  chan_index, &timer_io_channels[chan_index],
-								  now , count);
-			rSR(0) &= ~(masks);
-		}
-
-
-	}
-
-	/* Clear all the SR bits for interrupt enabled channels only */
-
-	//rSR(0) = ~(statusr & (enabled | enabled << 8));
-	return 0;
-}
 
 static int io_timer_handler(uint16_t timer_index)
 {
@@ -195,6 +163,8 @@ static int io_timer_handler(uint16_t timer_index)
 					channel_handlers[chan_index].callback(channel_handlers[chan_index].context, tmr,
 									      chan_index, &timer_io_channels[chan_index],
 									      now , count);
+					/* Clear all the SR bits for the interrupted channels only */
+					rSR(0) &= ~(masks);
 				}
 			}
 
@@ -207,16 +177,13 @@ static int io_timer_handler(uint16_t timer_index)
 		}
 	}
 
-	/* Clear all the SR bits for interrupt enabled channels only */
-
-	rSR(timer_index) = ~(statusr & (enabled | enabled << 8));
 	return 0;
 }
 
 int io_timer_handler0(int irq, void *context)
 {
-	return io_timer_handler_lite();
-	//return io_timer_handler(0);
+	return io_timer_handler(0);
+
 }
 
 int io_timer_handler1(int irq, void *context)
