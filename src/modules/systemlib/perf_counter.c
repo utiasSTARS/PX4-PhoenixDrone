@@ -400,6 +400,8 @@ perf_reset(perf_counter_t handle)
 			pce->time_total = 0;
 			pce->time_least = 0;
 			pce->time_most = 0;
+			pce->mean = 0.f;
+			pce->M2 = 0.f;
 			break;
 		}
 
