@@ -74,7 +74,7 @@
 #define PI 3.14159f
 #define RADS_FILTER_CONSTANT 0.8f
 #define TIMEOUT_MS 200
-#define CH_TIMEOUT_MS 1000
+#define CH_TIMEOUT_MS 100
 #define MED_FIL_ENTRY 5
 /*
  * Define the various LED flash sequences for each system state.
@@ -88,6 +88,7 @@
 #if !defined(BOARD_HAS_PWM)
 #  error "board_config.h needs to define BOARD_HAS_PWM"
 #endif
+
 
 
 class TSFMU : public device::CDev
@@ -113,9 +114,11 @@ public:
 
 	int cancel_hp_work();
 	int	start_hp_work();
+	void radsmeter_stop();
 	uint32_t show_pwm_mask();
 
 	void print_info();
+	void perf_counter_reset();
 private:
 
 	bool _report_lock = true;
@@ -204,6 +207,11 @@ private:
 	orb_advert_t	_rads_pub;
 
 	perf_counter_t	_ctl_latency;
+	perf_counter_t  _capture_cb;
+
+	/*Debug Only, to be deleted */
+	volatile uint64_t ridi_timediffs[5];
+	volatile uint8_t ridi_idx;
 
 	static bool	arm_nothrottle()
 	{
@@ -326,7 +334,10 @@ TSFMU::TSFMU() :
 	_rads_l_raw(0.f),
 	_rads_r_raw(0.f),
 	_rads_pub(nullptr),
-	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat"))
+	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat")),
+	_capture_cb(perf_alloc(PC_ELAPSED, "capture callback")),
+	ridi_timediffs{0},
+	ridi_idx(0)
 {
 	/* force output rates for TS on PixRacer */
 	_pwm_default_rate = 50;//Servos use 50Hz PWM Signal
@@ -432,6 +443,7 @@ TSFMU::~TSFMU()
 
 
 	perf_free(_ctl_latency);
+	perf_free(_capture_cb);
 
 	g_fmu = nullptr;
 }
@@ -473,8 +485,11 @@ TSFMU::init()
 	work_start();
 
 	/*Input Capture settings for reading motor RPM pulses */
-	up_input_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
-	up_input_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
+	//up_input_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
+	//up_input_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
+
+	rads_pulse_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
+	rads_pulse_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
 
 	return OK;
 }
@@ -716,7 +731,7 @@ TSFMU::reset_rads_meas(int ch)
 		for(unsigned i = 0; i < MED_FIL_ENTRY; i ++) _time_l[i] = 0;
 		_rads_l = 0.f;
 		_rads_l_raw = 0.f;
-		printf("reset left!\n");
+		//printf("reset left!\n");
 	}
 	if (ch == RPM_CH_RIGHT)
 	{
@@ -727,7 +742,7 @@ TSFMU::reset_rads_meas(int ch)
 		for(unsigned i = 0; i < MED_FIL_ENTRY; i ++) _time_r[i] = 0;
 		_rads_r = 0.f;
 		_rads_r_raw = 0.f;
-		printf("reset right!\n");
+		//printf("reset right!\n");
 	}
 }
 
@@ -755,8 +770,14 @@ TSFMU::rads_task_main()
 		if (ret == 0)
 		{
 			/*Check if any timeDiff is invalid */
-			if ((now - _current_edge_l) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_LEFT);
-			if ((now - _current_edge_r) > CH_TIMEOUT_MS * 1000) reset_rads_meas(RPM_CH_RIGHT);
+			if ((now - CH_TIMEOUT_MS * 1000 ) > _current_edge_l) {
+				printf("L-now:%llu\t current_edge:%llu\n", now, _current_edge_l);
+				reset_rads_meas(RPM_CH_LEFT);
+			}
+			if ((now - CH_TIMEOUT_MS * 1000) >  _current_edge_r) {
+				printf("R-now:%llu\t current_edge:%llu\n", now, _current_edge_r);
+				reset_rads_meas(RPM_CH_RIGHT);
+			}
 
 
 			_rads_l = _timeDiff_l_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
@@ -800,6 +821,7 @@ TSFMU::rads_task_main()
 	_rads_task = -1;
 }
 
+
 void
 TSFMU::capture_trampoline(void *context, uint32_t chan_index,
 			   hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
@@ -812,26 +834,38 @@ void
 TSFMU::capture_callback(uint32_t chan_index,
 			 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
+	//perf_begin(_capture_cb);
 	//fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
 	bool valid = true;
-	if (overflow) warnx("overflow!");
+	//tested: overflow does not occur as long as there is no printf in the callback which takes 3500-4000us each printf
+	//if (overflow) warnx("overflow: %x", overflow);
 	if (chan_index == RPM_CH_LEFT){
 		_current_edge_l = edge_time;
 		if ((_current_edge_l  - _last_edge_l) > CH_TIMEOUT_MS * 1000){
+			perf_begin(_capture_cb);
+			ridi_timediffs[ridi_idx] = _current_edge_l - _last_edge_l;
+			ridi_idx = (ridi_idx + 1) % 5;
 			valid = false;
-			printf("left timediff timeout\n");
+			//printf("L-current_edge:\t%llu\n", _current_edge_l);
+			//printf("L-last_edge:\t%llu\n", _last_edge_l);
+			//printf("left timediff timeout\n");
+			perf_end(_capture_cb);
+
 		}
 		else{
 			_timeDiff_l = (_current_edge_l - _last_edge_l);
 
 			_time_l[_timeIdx_l] = _timeDiff_l;
 			_timeIdx_l = (_timeIdx_l + 1) % MED_FIL_ENTRY;
+
+			uint64_t timediff_valid = check_anomaly(_time_l, MED_FIL_ENTRY, _timeDiff_l);
+			_timeDiff_l_fil = RADS_FILTER_CONSTANT * _timeDiff_l_fil +
+							(1 - RADS_FILTER_CONSTANT) * timediff_valid;
 		}
 		_last_edge_l = edge_time;
-		uint64_t timediff_valid = check_anomaly(_time_l, MED_FIL_ENTRY, edge_time);
 
-		_timeDiff_l_fil = RADS_FILTER_CONSTANT * _timeDiff_l_fil +
-				(1 - RADS_FILTER_CONSTANT) * timediff_valid;
+
+
 
 	}
 
@@ -839,18 +873,27 @@ TSFMU::capture_callback(uint32_t chan_index,
 		_current_edge_r = edge_time;
 
 		if ((_current_edge_r - _last_edge_r) > CH_TIMEOUT_MS * 1000){
+			perf_begin(_capture_cb);
+			ridi_timediffs[ridi_idx] = _current_edge_r - _last_edge_r;
+			ridi_idx = (ridi_idx + 1) % 5;
 			valid = false;
-			printf("right timediff timeout\n");
+			//printf("R-current_edge:\t%llu\n", _current_edge_r);
+			//printf("R-last_edge:\t%llu\n", _last_edge_r);
+			//printf("right timediff timeout\n");
+			perf_end(_capture_cb);
 		}
 		else{
 			_timeDiff_r = (_current_edge_r - _last_edge_r);
 			_time_r[_timeIdx_r] = _timeDiff_r;
 			_timeIdx_r = (_timeIdx_r + 1) % MED_FIL_ENTRY;
+
+			uint64_t timediff_valid = check_anomaly(_time_r, MED_FIL_ENTRY, edge_time);
+			_timeDiff_r_fil = RADS_FILTER_CONSTANT * _timeDiff_r_fil +
+					(1 - RADS_FILTER_CONSTANT) * timediff_valid;
 		}
+
 		_last_edge_r = edge_time;
-		uint64_t timediff_valid = check_anomaly(_time_r, MED_FIL_ENTRY, edge_time);
-		_timeDiff_r_fil = RADS_FILTER_CONSTANT * _timeDiff_r_fil +
-				(1 - RADS_FILTER_CONSTANT) * timediff_valid;
+
 
 	}
 
@@ -858,6 +901,7 @@ TSFMU::capture_callback(uint32_t chan_index,
 	int svalue;
 	sem_getvalue (&_sem_timer, &svalue);
 	if (valid && svalue < 0) sem_post(&_sem_timer);
+	//perf_end(_capture_cb);
 }
 
 //Bubble sort implementation of finding median, timer input capture tends to
@@ -876,7 +920,7 @@ TSFMU::check_anomaly(volatile uint64_t* array, unsigned size, uint64_t newest){
 		}
 	}
 	uint64_t median = sorted[size/2];
-	return (newest > 1.2 * median || newest < 0.8 * median) ? median : newest;
+	return (newest > 1.1 * median || newest < 0.9 * median) ? median : newest;
 }
 
 void
@@ -1204,6 +1248,28 @@ void TSFMU::work_stop()
 
 	/* tell the dtor that we are exiting */
 	_initialized = false;
+}
+
+void TSFMU::radsmeter_stop()
+{
+	if (_rads_task != -1) {
+		_rads_task_should_exit = true;
+
+		/* wait for a second for the task to quit at our request */
+		unsigned i = 0;
+
+		do {
+			/* wait 20ms */
+			usleep(20000);
+
+			/* if we have given up, kill it */
+			if (++i > 50) {
+				px4_task_delete(_rads_task);
+				break;
+			}
+		} while (_rads_task != -1);
+	}
+	PX4_INFO("radsmeter stopped.");
 }
 
 
@@ -1746,6 +1812,17 @@ TSFMU::start_hp_work()
 }
 
 void
+TSFMU::perf_counter_reset()
+{
+	perf_reset(_capture_cb);
+
+	for (unsigned i = 0; i < 5; i ++){
+		ridi_timediffs[i] = 0;
+	}
+	ridi_idx = 0;
+}
+
+void
 TSFMU::print_info()
 {
 	printf("TSFMU INFO:\n");
@@ -1793,6 +1870,10 @@ TSFMU::print_info()
 	printf("RPM-L: %.2f\n", (double)(_rads_l * 60.f / (2.f*PI)));
 	printf("RPM-R: %.2f\n", (double)(_rads_r * 60.f / (2.f*PI)));
 
+	perf_print_counter(_capture_cb);
+
+	for (unsigned i = 0; i < 5; i++) printf("%llu\t", ridi_timediffs[i]);
+	printf("\n");
 }
 
 namespace
@@ -2098,9 +2179,23 @@ tsfmu_main(int argc, char *argv[])
 		errx(0, "TSFMU driver stopped");
 	}
 
+	if (!strcmp(verb, "stop-rads")) {
+		if (g_fmu != NULL) g_fmu->radsmeter_stop();
+		exit(0);
+	}
 
 	if (!strcmp(verb, "test")) {
 		test();
+	}
+
+	if (!strcmp(verb, "perf-reset")) {
+		if (g_fmu!= NULL)
+		{
+			g_fmu->perf_counter_reset();
+
+		}
+
+		exit(0);
 	}
 
 	if (!strcmp(verb, "info")) {
