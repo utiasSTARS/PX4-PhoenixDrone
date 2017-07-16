@@ -769,11 +769,11 @@ TSFMU::rads_task_main()
 		{
 			/*Check if any timeDiff is invalid */
 			if ((now - CH_TIMEOUT_MS * 1000 ) > _current_edge_l) {
-				printf("L-now:%llu\t current_edge:%llu\n", now, _current_edge_l);
+				//printf("L-now:%llu\t current_edge:%llu\n", now, _current_edge_l);
 				reset_rads_meas(RPM_CH_LEFT);
 			}
 			if ((now - CH_TIMEOUT_MS * 1000) >  _current_edge_r) {
-				printf("R-now:%llu\t current_edge:%llu\n", now, _current_edge_r);
+				//printf("R-now:%llu\t current_edge:%llu\n", now, _current_edge_r);
 				reset_rads_meas(RPM_CH_RIGHT);
 			}
 
@@ -786,7 +786,7 @@ TSFMU::rads_task_main()
 		/* timeout */
 		else
 		{
-			printf("semaphore timeout!\n");
+			//printf("semaphore timeout!\n");
 			reset_rads_meas(RPM_CH_LEFT);
 			reset_rads_meas(RPM_CH_RIGHT);
 		}
@@ -802,11 +802,11 @@ TSFMU::rads_task_main()
 
 		if(esc_rads_msg.rads_raw[0] < 0 || esc_rads_msg.rads_raw[0] > 10000.f){
 			esc_rads_msg.rads_raw[0] = 0;
-			printf("esc rads 0 not normal.\n");
+			warnx("esc rads 0 not normal.\n");
 		}
 		if(esc_rads_msg.rads_raw[1] < 0 || esc_rads_msg.rads_raw[1] > 10000.f){
 			esc_rads_msg.rads_raw[1] = 0;
-			printf("esc rads 1 not normal.\n");
+			warnx("esc rads 1 not normal.\n");
 		}
 		if (_rads_pub != nullptr) {
 			orb_publish(ORB_ID(esc_rads), _rads_pub, &esc_rads_msg);
