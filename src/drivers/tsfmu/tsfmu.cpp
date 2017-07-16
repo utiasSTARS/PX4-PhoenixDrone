@@ -832,7 +832,7 @@ void
 TSFMU::capture_callback(uint32_t chan_index,
 			 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
-	//perf_begin(_capture_cb);
+	perf_begin(_capture_cb);
 	//fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
 	bool valid = true;
 	//tested: overflow does not occur as long as there is no printf in the callback which takes 3500-4000us each printf
@@ -840,14 +840,12 @@ TSFMU::capture_callback(uint32_t chan_index,
 	if (chan_index == RPM_CH_LEFT){
 		_current_edge_l = edge_time;
 		if ((_current_edge_l  - _last_edge_l) > CH_TIMEOUT_MS * 1000){
-			perf_begin(_capture_cb);
 			ridi_timediffs[ridi_idx] = _current_edge_l - _last_edge_l;
 			ridi_idx = (ridi_idx + 1) % 5;
 			valid = false;
 			//printf("L-current_edge:\t%llu\n", _current_edge_l);
 			//printf("L-last_edge:\t%llu\n", _last_edge_l);
 			//printf("left timediff timeout\n");
-			perf_end(_capture_cb);
 
 		}
 		else{
@@ -871,14 +869,12 @@ TSFMU::capture_callback(uint32_t chan_index,
 		_current_edge_r = edge_time;
 
 		if ((_current_edge_r - _last_edge_r) > CH_TIMEOUT_MS * 1000){
-			perf_begin(_capture_cb);
 			ridi_timediffs[ridi_idx] = _current_edge_r - _last_edge_r;
 			ridi_idx = (ridi_idx + 1) % 5;
 			valid = false;
 			//printf("R-current_edge:\t%llu\n", _current_edge_r);
 			//printf("R-last_edge:\t%llu\n", _last_edge_r);
 			//printf("right timediff timeout\n");
-			perf_end(_capture_cb);
 		}
 		else{
 			_timeDiff_r = (_current_edge_r - _last_edge_r);
@@ -899,7 +895,7 @@ TSFMU::capture_callback(uint32_t chan_index,
 	int svalue;
 	sem_getvalue (&_sem_timer, &svalue);
 	if (valid && svalue < 0) sem_post(&_sem_timer);
-	//perf_end(_capture_cb);
+	perf_end(_capture_cb);
 }
 
 //Bubble sort implementation of finding median, timer input capture tends to
