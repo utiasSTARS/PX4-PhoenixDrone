@@ -641,6 +641,20 @@ struct log_STCK_s {
 	uint16_t stack_free;
 };
 
+/* --- ESC RADS --- */
+#define LOG_RADS_MSG 64
+struct log_RADS_s {
+	uint64_t timestamp;
+	float rads_1;
+	float rads_2;
+	float rads_3;
+	float rads_4;
+	float rads_raw_1;
+	float rads_raw_2;
+	float rads_raw_3;
+	float rads_raw_4;
+};
+
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
 
 /* --- TIME - TIME STAMP --- */
@@ -732,6 +746,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(LOAD, "f", "CPU"),
 	LOG_FORMAT(DPRS, "Qffff", "errors,DPRESraw,DPRES,DPRESmax,Temp"),
 	LOG_FORMAT(STCK, "NH", "Task,Free"),
+	LOG_FORMAT(RADS, "Qffffffff", "t,w1,w2,w3,w4,wr1,wr2,wr3,wr4"),
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */
 	LOG_FORMAT(TIME, "Q", "StartTime"),

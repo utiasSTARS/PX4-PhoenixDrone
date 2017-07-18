@@ -112,6 +112,7 @@
 #include <uORB/topics/commander_state.h>
 #include <uORB/topics/cpuload.h>
 #include <uORB/topics/low_stack.h>
+#include <uORB/topics/esc_rads.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
@@ -1214,6 +1215,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct cpuload_s cpuload;
 		struct vehicle_gps_position_s dual_gps_pos;
 		struct low_stack_s low_stack;
+		struct esc_rads_s esc_rads;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1277,6 +1279,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_LOAD_s log_LOAD;
 			struct log_DPRS_s log_DPRS;
 			struct log_STCK_s log_STCK;
+			struct log_RADS_s log_RADS;
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1328,6 +1331,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int cpuload_sub;
 		int diff_pres_sub;
 		int low_stack_sub;
+		int esc_rads_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1372,6 +1376,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.cpuload_sub = -1;
 	subs.diff_pres_sub = -1;
 	subs.low_stack_sub = -1;
+	subs.esc_rads_sub = -1;
 
 	/* add new topics HERE */
 
@@ -2322,6 +2327,20 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_STCK.stack_free = buf.low_stack.stack_free;
 			strncpy(log_msg.body.log_STCK.task_name, (char*)buf.low_stack.task_name, sizeof(log_msg.body.log_STCK.task_name));
 			LOGBUFFER_WRITE_AND_COUNT(STCK);
+		}
+
+		/* --- ESC_RADS --- */
+		if (copy_if_updated(ORB_ID(esc_rads), &subs.esc_rads_sub, &buf.esc_rads))  {
+			log_msg.msg_type = LOG_RADS_MSG;
+			log_msg.body.log_RADS.timestamp = buf.esc_rads.timestamp;
+			log_msg.body.log_RADS.rads_1 = buf.esc_rads.rads_filtered[0];
+			log_msg.body.log_RADS.rads_2 = buf.esc_rads.rads_filtered[1];
+			log_msg.body.log_RADS.rads_3 = buf.esc_rads.rads_filtered[2];
+			log_msg.body.log_RADS.rads_4 = buf.esc_rads.rads_filtered[3];
+			log_msg.body.log_RADS.rads_raw_1 = buf.esc_rads.rads_raw[0];
+			log_msg.body.log_RADS.rads_raw_2 = buf.esc_rads.rads_raw[1];
+			log_msg.body.log_RADS.rads_raw_3 = buf.esc_rads.rads_raw[2];
+			log_msg.body.log_RADS.rads_raw_4 = buf.esc_rads.rads_raw[3];
 		}
 
 		pthread_mutex_lock(&logbuffer_mutex);
