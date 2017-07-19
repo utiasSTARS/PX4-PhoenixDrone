@@ -28,6 +28,7 @@
 #include <platforms/px4_workqueue.h>
 
 #include <drivers/device/device.h>
+#include <drivers/device/i2c.h>
 #include <drivers/drv_pwm_output.h>
 #include <drivers/drv_input_capture.h>
 #include <drivers/drv_gpio.h>
@@ -107,6 +108,7 @@ public:
 	int		set_pwm_alt_rate(unsigned rate);
 	int		set_pwm_alt_channels(uint32_t channels);
 
+	static int	set_i2c_bus_clock(unsigned bus, unsigned clock_hz);
 
 	static void	capture_trampoline(void *context, uint32_t chan_index,
 					   hrt_abstime edge_time, uint32_t edge_state,
@@ -251,6 +253,8 @@ private:
 	static const unsigned	_ngpio;
 
 	void		gpio_reset(void);
+	void		sensor_reset(int ms);
+	void		peripheral_reset(int ms);
 	void		gpio_set_function(uint32_t gpios, int function);
 	void		gpio_write(uint32_t gpios, int function);
 	uint32_t	gpio_read(void);
@@ -642,6 +646,11 @@ TSFMU::set_pwm_alt_channels(uint32_t channels)
 	return set_pwm_rate(channels, _pwm_default_rate, _pwm_alt_rate);
 }
 
+int
+TSFMU::set_i2c_bus_clock(unsigned bus, unsigned clock_hz)
+{
+	return device::I2C::set_bus_clock(bus, clock_hz);
+}
 
 void
 TSFMU::subscribe()
@@ -1661,6 +1670,135 @@ TSFMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 	return ret;
 }
 
+void
+TSFMU::sensor_reset(int ms)
+{
+	if (ms < 1) {
+		ms = 1;
+	}
+
+	board_spi_reset(ms);
+}
+
+void
+TSFMU::peripheral_reset(int ms)
+{
+	if (ms < 1) {
+		ms = 10;
+	}
+
+	board_peripheral_reset(ms);
+}
+
+void
+TSFMU::gpio_reset(void)
+{
+	/*
+	 * Setup default GPIO config - all pins as GPIOs, input if
+	 * possible otherwise output if possible.
+	 */
+	for (unsigned i = 0; i < _ngpio; i++) {
+		if (_gpio_tab[i].input != 0) {
+			px4_arch_configgpio(_gpio_tab[i].input);
+
+		} else if (_gpio_tab[i].output != 0) {
+			px4_arch_configgpio(_gpio_tab[i].output);
+		}
+	}
+
+#if defined(GPIO_GPIO_DIR)
+	/* if we have a GPIO direction control, set it to zero (input) */
+	px4_arch_gpiowrite(GPIO_GPIO_DIR, 0);
+	px4_arch_configgpio(GPIO_GPIO_DIR);
+#endif
+}
+
+void
+TSFMU::gpio_set_function(uint32_t gpios, int function)
+{
+#if defined(BOARD_GPIO_SHARED_BUFFERED_BITS) && defined(GPIO_GPIO_DIR)
+
+	/*
+	 * GPIOs 0 and 1 must have the same direction as they are buffered
+	 * by a shared 2-port driver.  Any attempt to set either sets both.
+	 */
+	if (gpios & BOARD_GPIO_SHARED_BUFFERED_BITS) {
+		gpios |= BOARD_GPIO_SHARED_BUFFERED_BITS;
+
+		/* flip the buffer to output mode if required */
+		if (GPIO_SET_OUTPUT == function ||
+		    GPIO_SET_OUTPUT_LOW == function ||
+		    GPIO_SET_OUTPUT_HIGH == function) {
+			px4_arch_gpiowrite(GPIO_GPIO_DIR, 1);
+		}
+	}
+
+#endif
+
+	/* configure selected GPIOs as required */
+	for (unsigned i = 0; i < _ngpio; i++) {
+		if (gpios & (1 << i)) {
+			switch (function) {
+			case GPIO_SET_INPUT:
+				px4_arch_configgpio(_gpio_tab[i].input);
+				break;
+
+			case GPIO_SET_OUTPUT:
+				px4_arch_configgpio(_gpio_tab[i].output);
+				break;
+
+			case GPIO_SET_OUTPUT_LOW:
+				px4_arch_configgpio((_gpio_tab[i].output & ~(GPIO_OUTPUT_SET)) | GPIO_OUTPUT_CLEAR);
+				break;
+
+			case GPIO_SET_OUTPUT_HIGH:
+				px4_arch_configgpio((_gpio_tab[i].output & ~(GPIO_OUTPUT_CLEAR)) | GPIO_OUTPUT_SET);
+				break;
+
+			case GPIO_SET_ALT_1:
+				if (_gpio_tab[i].alt != 0) {
+					px4_arch_configgpio(_gpio_tab[i].alt);
+				}
+
+				break;
+			}
+		}
+	}
+
+#if defined(BOARD_GPIO_SHARED_BUFFERED_BITS) && defined(GPIO_GPIO_DIR)
+
+	/* flip buffer to input mode if required */
+	if ((GPIO_SET_INPUT == function) && (gpios & BOARD_GPIO_SHARED_BUFFERED_BITS)) {
+		px4_arch_gpiowrite(GPIO_GPIO_DIR, 0);
+	}
+
+#endif
+}
+
+void
+TSFMU::gpio_write(uint32_t gpios, int function)
+{
+	int value = (function == GPIO_SET) ? 1 : 0;
+
+	for (unsigned i = 0; i < _ngpio; i++)
+		if (gpios & (1 << i)) {
+			px4_arch_gpiowrite(_gpio_tab[i].output, value);
+		}
+}
+
+uint32_t
+TSFMU::gpio_read(void)
+{
+	uint32_t bits = 0;
+
+	for (unsigned i = 0; i < _ngpio; i++)
+		if (px4_arch_gpioread(_gpio_tab[i].input)) {
+			bits |= (1 << i);
+		}
+
+	return bits;
+}
+
 int
 TSFMU::capture_ioctl(struct file *filp, int cmd, unsigned long arg)
 {
@@ -1757,6 +1895,71 @@ TSFMU::capture_ioctl(struct file *filp, int cmd, unsigned long arg)
 	}
 
 	unlock();
+	return ret;
+}
+
+int
+TSFMU::gpio_ioctl(struct file *filp, int cmd, unsigned long arg)
+{
+	int	ret = OK;
+
+	lock();
+
+	switch (cmd) {
+
+	case GPIO_RESET:
+		gpio_reset();
+		break;
+
+	case GPIO_SENSOR_RAIL_RESET:
+		sensor_reset(arg);
+		break;
+
+	case GPIO_PERIPHERAL_RAIL_RESET:
+		peripheral_reset(arg);
+		break;
+
+	case GPIO_SET_OUTPUT:
+	case GPIO_SET_OUTPUT_LOW:
+	case GPIO_SET_OUTPUT_HIGH:
+	case GPIO_SET_INPUT:
+	case GPIO_SET_ALT_1:
+#ifdef CONFIG_ARCH_BOARD_AEROFC_V1
+		ret = -EINVAL;
+#else
+		gpio_set_function(arg, cmd);
+#endif
+		break;
+
+	case GPIO_SET_ALT_2:
+	case GPIO_SET_ALT_3:
+	case GPIO_SET_ALT_4:
+		ret = -EINVAL;
+		break;
+
+	case GPIO_SET:
+	case GPIO_CLEAR:
+#ifdef CONFIG_ARCH_BOARD_AEROFC_V1
+		ret = -EINVAL;
+#else
+		gpio_write(arg, cmd);
+#endif
+		break;
+
+	case GPIO_GET:
+#ifdef CONFIG_ARCH_BOARD_AEROFC_V1
+		ret = -EINVAL;
+#else
+		*(uint32_t *)arg = gpio_read();
+#endif
+		break;
+
+	default:
+		ret = -ENOTTY;
+	}
+
+	unlock();
+
 	return ret;
 }
 
@@ -1873,6 +2076,11 @@ TSFMU::print_info()
 namespace
 {
 
+int fmu_new_i2c_speed(unsigned bus, unsigned clock_hz)
+{
+	return TSFMU::set_i2c_bus_clock(bus, clock_hz);
+}
+
 int
 tsfmu_start()
 {
@@ -1912,6 +2120,41 @@ tsfmu_stop(void)
 	return ret;
 }
 
+void
+sensor_reset(int ms)
+{
+	int	 fd;
+
+	fd = open(TSFMU_DEV_PATH, O_RDWR);
+
+	if (fd < 0) {
+		errx(1, "open fail");
+	}
+
+	if (ioctl(fd, GPIO_SENSOR_RAIL_RESET, ms) < 0) {
+		warnx("sensor rail reset failed");
+	}
+
+	close(fd);
+}
+
+void
+peripheral_reset(int ms)
+{
+	int	 fd;
+
+	fd = open(TSFMU_DEV_PATH, O_RDWR);
+
+	if (fd < 0) {
+		errx(1, "open fail");
+	}
+
+	if (ioctl(fd, GPIO_PERIPHERAL_RAIL_RESET, ms) < 0) {
+		warnx("peripheral rail reset failed");
+	}
+
+	close(fd);
+}
 
 
 
@@ -2160,6 +2403,24 @@ tsfmu_main(int argc, char *argv[])
 {
 	const char *verb = argv[1];
 
+	/* does not operate on a FMU instance */
+	if (!strcmp(verb, "i2c")) {
+		if (argc > 3) {
+			int bus = strtol(argv[2], 0, 0);
+			int clock_hz = strtol(argv[3], 0, 0);
+			int ret = fmu_new_i2c_speed(bus, clock_hz);
+
+			if (ret) {
+				errx(ret, "setting I2C clock failed");
+			}
+
+			exit(0);
+
+		} else {
+			warnx("i2c cmd args: <bus id> <clock Hz>");
+		}
+	}
+
 	if (!strcmp(verb, "start")) {
 		int ret = tsfmu_start();
 		if (ret != OK) {
@@ -2172,6 +2433,16 @@ tsfmu_main(int argc, char *argv[])
 		tsfmu_stop();
 		errx(0, "TSFMU driver stopped");
 	}
+
+	if (!strcmp(verb, "id")) {
+		uint8_t id[12];
+		(void)get_board_serial(id);
+
+		errx(0, "Board serial:\n %02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X",
+		     (unsigned)id[0], (unsigned)id[1], (unsigned)id[2], (unsigned)id[3], (unsigned)id[4], (unsigned)id[5],
+		     (unsigned)id[6], (unsigned)id[7], (unsigned)id[8], (unsigned)id[9], (unsigned)id[10], (unsigned)id[11]);
+	}
+
 
 	if (!strcmp(verb, "stop-rads")) {
 		if (g_fmu != NULL) g_fmu->radsmeter_stop();
@@ -2208,6 +2479,31 @@ tsfmu_main(int argc, char *argv[])
 		fake(argc - 1, argv + 1);
 	}
 
+	if (!strcmp(verb, "sensor_reset")) {
+		if (argc > 2) {
+			int reset_time = strtol(argv[2], 0, 0);
+			sensor_reset(reset_time);
+
+		} else {
+			sensor_reset(0);
+			warnx("resettet default time");
+		}
+
+		exit(0);
+	}
+
+	if (!strcmp(verb, "peripheral_reset")) {
+		if (argc > 2) {
+			int reset_time = strtol(argv[2], 0, 0);
+			peripheral_reset(reset_time);
+
+		} else {
+			peripheral_reset(0);
+			warnx("resettet default time");
+		}
+
+		exit(0);
+	}
 
 	if (!strcmp(verb, "cancel_hpwork")) {
 		if (g_fmu!= NULL){
