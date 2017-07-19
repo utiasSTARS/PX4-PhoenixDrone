@@ -2341,6 +2341,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_RADS.rads_raw_2 = buf.esc_rads.rads_raw[1];
 			log_msg.body.log_RADS.rads_raw_3 = buf.esc_rads.rads_raw[2];
 			log_msg.body.log_RADS.rads_raw_4 = buf.esc_rads.rads_raw[3];
+			LOGBUFFER_WRITE_AND_COUNT(RADS);
 		}
 
 		pthread_mutex_lock(&logbuffer_mutex);
