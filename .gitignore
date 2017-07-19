@@ -86,3 +86,5 @@ coverage-html/
 coverage.info
 
 posix-configs/SITL/init/test/*_generated
+
+tools/sdlog2/PX4Logs/
