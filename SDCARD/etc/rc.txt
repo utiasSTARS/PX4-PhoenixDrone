@@ -1,0 +1,28 @@
+#Custom rc startup script for FlightX Tailsitter
+
+uorb start
+
+set PARAM_FILE /fs/microsd/params
+if mtd start
+then
+	set PARAM_FILE /fs/mtd_params
+fi
+
+param select $PARAM_FILE
+if param load
+then
+else
+	if param reset
+	then
+	fi
+fi
+
+#commander start
+tsfmu start
+sh /fs/microsd/etc/rc.sensors
+mavlink start -r 800000 -d /dev/ttyACM0 -m config -x
+
+
+sh /fs/microsd/etc/config.txt
+mavlink boot_complete
+

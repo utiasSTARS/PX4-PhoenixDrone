@@ -1,0 +1,6 @@
+#comments start with #
+#format: <uORB Topic> (<minimum update interval>)-optional
+#example: airspeed 50 (subscribe to airspeed topic with 50ms minimum interval for updates)
+esc_rads
+actuator_outputs
+
