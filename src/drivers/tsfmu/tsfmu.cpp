@@ -63,6 +63,8 @@
 
 #define TSFMU_DEV_PATH "/dev/tsfmu"
 
+#define PWM_SERVO_MIN 900
+#define PWM_SERVO_MAX 2100
 #define SCHEDULE_INTERVAL	2000	/**< The schedule interval in usec (500 Hz) */
 #define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 #define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)
@@ -358,6 +360,15 @@ TSFMU::TSFMU() :
 		_failsafe_pwm[i] = 950;
 		_disarmed_pwm[i] = 900;
 	}
+
+	//Special PWM_MIN and PWM_MAX for the servos
+	for (unsigned i = 4; i <= 5; i++) {
+		_min_pwm[i] = PWM_SERVO_MIN;
+		_max_pwm[i] = PWM_SERVO_MAX;
+		_failsafe_pwm[i] = (PWM_SERVO_MIN + PWM_SERVO_MAX) / 2;
+		_disarmed_pwm[i] = 500;
+	}
+
 	_num_disarmed_set = 4;
 	_num_failsafe_set = 4;
 
@@ -370,8 +381,8 @@ TSFMU::TSFMU() :
 
 	mixer_ts_s default_mixer_info;
 	default_mixer_info.rads_max = 1000.f;
-	default_mixer_info.deg_max = 30.f;
-	default_mixer_info.deg_min = -30.f;
+	default_mixer_info.deg_max = 50.f;
+	default_mixer_info.deg_min = -50.f;
 	default_mixer_info.k_c = -1.f;
 	default_mixer_info.k_w2 = 1.f;
 	default_mixer_info.k_w = 1.f;
