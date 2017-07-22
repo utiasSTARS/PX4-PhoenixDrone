@@ -346,7 +346,7 @@ TSFMU::TSFMU() :
 	ridi_idx(0)
 {
 	/* force output rates for TS on PixRacer */
-	_pwm_default_rate = 50;//Servos use 50Hz PWM Signal
+	_pwm_default_rate = 200;//Digital Servos seem to be okay with 200Hz PWM Signal
 	_pwm_alt_rate = 500;//ESCs use 500Hz PWM Signal
 	_pwm_alt_rate_channels = 0x0f;//Channel 1,2,3,4 have alt rate
 	_pwm_mask = 0x33;//Enable Channel 1,2,5,6
