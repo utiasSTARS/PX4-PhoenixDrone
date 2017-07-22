@@ -1,3 +1,4 @@
 esc_rads
 actuator_outputs
+battery_status
 
