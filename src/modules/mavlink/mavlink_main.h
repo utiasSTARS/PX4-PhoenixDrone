@@ -583,6 +583,8 @@ private:
 	param_t			_param_forward_externalsp;
 	param_t			_param_broadcast;
 
+	unsigned		_force_mavlink_proto_ver;
+
 	unsigned		_system_type;
 	static bool		_config_link_on;
 

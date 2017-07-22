@@ -266,6 +266,7 @@ Mavlink::Mavlink() :
 	_param_use_hil_gps(PARAM_INVALID),
 	_param_forward_externalsp(PARAM_INVALID),
 	_param_broadcast(PARAM_INVALID),
+	_force_mavlink_proto_ver(-1),
 	_system_type(0),
 
 	/* performance counters */
@@ -585,6 +586,12 @@ void Mavlink::mavlink_update_system(void)
 	if (_protocol_version_switch != proto) {
 		_protocol_version_switch = proto;
 		set_proto_version(proto);
+	}
+
+	if (_force_mavlink_proto_ver != -1){
+		_protocol_version_switch = _force_mavlink_proto_ver;
+		set_proto_version(_force_mavlink_proto_ver);
+		PX4_INFO("Force MAVLink Protocol Ver: %d");
 	}
 
 	param_get(_param_radio_id, &_radio_id);
@@ -1734,7 +1741,7 @@ Mavlink::task_main(int argc, char *argv[])
 	int temp_int_arg;
 #endif
 
-	while ((ch = px4_getopt(argc, argv, "b:r:d:u:o:m:t:fpvwx", &myoptind, &myoptarg)) != EOF) {
+	while ((ch = px4_getopt(argc, argv, "b:r:d:u:o:m:t:p:fvwx", &myoptind, &myoptarg)) != EOF) {
 		switch (ch) {
 		case 'b':
 			_baudrate = strtoul(myoptarg, NULL, 10);
@@ -1858,6 +1865,10 @@ Mavlink::task_main(int argc, char *argv[])
 
 		case 'x':
 			_ftp_on = true;
+			break;
+
+		case 'p':
+			_force_mavlink_proto_ver = atoi(myoptarg);
 			break;
 
 		default:
