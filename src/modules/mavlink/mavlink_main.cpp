@@ -1690,7 +1690,7 @@ Mavlink::update_rate_mult()
 		} else if (tstatus.txbuf > RADIO_BUFFER_HALF_PERCENTAGE) {
 			/* this indicates spare bandwidth, increase by 2.5% */
 			hardware_mult *= 1.025f;
-			PX4_INFO("Buffer spare");
+			//PX4_INFO("Buffer spare");
 			/* limit to a max multiplier of 1 */
 			hardware_mult = fminf(1.0f, hardware_mult);
 		}
