@@ -1673,7 +1673,8 @@ Mavlink::update_rate_mult()
 	/* scale down if we have a TX err rate suggesting link congestion */
 	if (_rate_txerr > 0.0f && !radio_critical) {
 		hardware_mult = (_rate_tx) / (_rate_tx + _rate_txerr);
-		PX4_INFO("TX Err Rate: %.2f", double(_rate_txerr));
+		if (tstatus.type != telemetry_status_s::TELEMETRY_STATUS_RADIO_TYPE_USB)
+			PX4_INFO("TX Err Rate: %.2f", double(_rate_txerr));
 
 	} else if (radio_found && tstatus.telem_time != _last_hw_rate_timestamp) {
 
