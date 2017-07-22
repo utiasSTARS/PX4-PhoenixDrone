@@ -2390,9 +2390,12 @@ fake(int argc, char *argv[])
 	actuator_armed_s aa;
 
 	aa.armed = true;
+	aa.prearmed = true;
+	aa.ready_to_arm = true;
 	aa.lockdown = false;
 	aa.manual_lockdown = false;
 	aa.force_failsafe = false;
+	aa.in_esc_calibration_mode = false;
 
 	handle = orb_advertise(ORB_ID(actuator_armed), &aa);
 
