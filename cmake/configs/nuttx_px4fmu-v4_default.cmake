@@ -89,6 +89,7 @@ set(config_module_list
 	modules/unit_test
 	modules/uORB/uORB_tests
 	systemcmds/tests
+	systemcmds/ts_loadcell_test
 
 	#
 	# General system control
@@ -151,6 +152,7 @@ set(config_module_list
 	lib/geo_lookup
 	lib/conversion
 	lib/launchdetection
+	lib/LoopTimer
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
