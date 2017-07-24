@@ -60,6 +60,17 @@ void arm_disarm_construct_msg(struct actuator_armed_s* msg, bool arm)
 
 int step_test(int argc, char *argv[])
 {
+	if (!argv) errx(1, "Please provide enabled channels");
+	bool left_en = false;
+	bool right_en = false;
+	//printf("%s %s", argv[0], argv[1]);
+	if (!strcmp(argv[1], "left")) left_en = true;
+	else if (!strcmp(argv[1], "right")) right_en = true;
+	else if (!strcmp(argv[1], "both")) left_en = right_en = true;
+	else{
+		warnx("not recognized command exiting...");
+		exit(0);
+	}
 	test_should_exit = false;
 	orb_advert_t _actuator_test_pub = NULL;
 	struct ts_actuator_controls_s msg;
@@ -81,15 +92,15 @@ int step_test(int argc, char *argv[])
 
 
 	for (unsigned i = 0; i < NUM_SPD_LEVEL; i ++) {
-		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = (i + 1) / NUM_SPD_LEVEL;
-		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = (i + 1) / NUM_SPD_LEVEL;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = left_en ? (i + 1) / NUM_SPD_LEVEL : 0.0f;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = right_en ? (i + 1) / NUM_SPD_LEVEL : 0.0f;
 		//Publish to let motor spin to desired target first
 		orb_publish(ORB_ID(ts_actuator_controls_0), _actuator_test_pub, &msg);
 		usleep(500000);//sleep 500ms waiting for motor response
 		for (unsigned j = 0; j <= NUM_AGL_LEVEL; j ++) {
 			float angle = -50.f + j *ANGLE_DELTA;
-			msg.control[ts_actuator_controls_s::INDEX_DEGREE_LEFT] = (i % 2) ? angle : -1.f * angle;
-			msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = (i % 2) ? angle : -1.f * angle;
+			msg.control[ts_actuator_controls_s::INDEX_DEGREE_LEFT] = left_en ? ((i % 2) ? angle : -1.f * angle) : 0.0f;
+			msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = right_en ? ((i % 2) ? angle : -1.f * angle) : 0.0f;
 			msg.timestamp = hrt_absolute_time();
 			if (test_should_exit) goto stop;
 			orb_publish(ORB_ID(ts_actuator_controls_0), _actuator_test_pub, &msg);
@@ -260,7 +271,7 @@ int loadcell_test_main(int argc, char *argv[])
 									SCHED_PRIORITY_DEFAULT,
 									1024,
 									step_test,
-									NULL);
+									(argv && argc > 2) ? (char *const *) &argv[2] : (char *const *) NULL);
 		if (pid <= 0) {
 			errx(1, "failed to start ts loadcell step test");
 			exit(0);
