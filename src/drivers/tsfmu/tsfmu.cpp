@@ -384,8 +384,8 @@ TSFMU::TSFMU() :
 	default_mixer_info.deg_max = 50.f;
 	default_mixer_info.deg_min = -50.f;
 	default_mixer_info.k_c = -1.f;
-	default_mixer_info.k_w2 = 1.f;
-	default_mixer_info.k_w = 1.f;
+	default_mixer_info.k_w2 = 0.f;//1.f;
+	default_mixer_info.k_w = 2.f;//1.f;
 
 	_ts_mixer = new TailsitterMixer(ts_control_callback, (uintptr_t)_ts_controls, &default_mixer_info);
 	_ts_mixer->groups_required(_groups_required);
