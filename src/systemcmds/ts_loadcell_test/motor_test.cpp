@@ -6,12 +6,24 @@
  */
 #include "ts_loadcell_test.h"
 
-int motor_test(int argc, char*arv[])
+int motor_test(int argc, char*argv[])
 {
+	if (!argv) errx(1, "Please provide enabled channels");
+	bool left_en = false;
+	bool right_en = false;
+	//printf("%s %s", argv[0], argv[1]);
+	if (!strcmp(argv[1], "left")) left_en = true;
+	else if (!strcmp(argv[1], "right")) right_en = true;
+	else if (!strcmp(argv[1], "both")) left_en = right_en = true;
+	else{
+		warnx("not recognized command exiting...");
+		exit(0);
+	}
+	test_should_exit = false;
 	orb_advert_t _actuator_test_pub = NULL;
 	struct ts_actuator_controls_s msg;
 
-	LoopTimer loopTimer(1000);//Loop Period 1ms
+	LoopTimer loopTimer(2500);//Loop Period 2.5ms
 
 	/* init all actuators to zero */
 	msg.timestamp = hrt_absolute_time();
@@ -31,12 +43,12 @@ int motor_test(int argc, char*arv[])
 	uint64_t test_init = hrt_absolute_time();
 	float test_elapsed = 0;
 
-	while(test_elapsed < 20.f){ //Test for 20 seconds
+	while(test_elapsed < 30.f){ //Test for 30 seconds
 		loopTimer.wait();
 		test_elapsed = hrt_elapsed_time(&test_init)/1e6f;
 		msg.timestamp = hrt_absolute_time();
-		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = 1.f - (fabsf(test_elapsed - 10.f) / 10.f);
-		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = 0;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = left_en ? (1.f - (fabsf(test_elapsed - 15.f) / 15.f)) : 0.f;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = right_en ? (1.f - (fabsf(test_elapsed - 15.f) / 15.f)) : 0.f;;
 		msg.control[ts_actuator_controls_s::INDEX_DEGREE_LEFT] = 0;
 		msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = 0;
 		orb_publish(ORB_ID(ts_actuator_controls_0), _actuator_test_pub, &msg);

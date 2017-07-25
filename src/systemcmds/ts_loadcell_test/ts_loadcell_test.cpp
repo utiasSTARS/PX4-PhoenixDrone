@@ -41,7 +41,7 @@ int loadcell_test_main(int argc, char *argv[])
 				SCHED_PRIORITY_DEFAULT,
 				1024,
 				motor_test,
-				NULL);
+				(argv && argc > 2) ? (char *const *) &argv[2] : (char *const *) NULL);
 		if (pid <= 0) {
 			errx(1, "failed to start motor test");
 			exit(0);
