@@ -31,6 +31,7 @@ extern "C" __EXPORT int loadcell_test_main(int argc, char* argv[]);
 void ts_usage(void);
 void arm_disarm_construct_msg(struct actuator_armed_s* msg, bool arm);
 int motor_test(int argc, char*arv[]);
+int motor_step_test(int argc, char*argv[]);
 int step_test(int argc, char *argv[]);
 
 extern bool test_should_exit;

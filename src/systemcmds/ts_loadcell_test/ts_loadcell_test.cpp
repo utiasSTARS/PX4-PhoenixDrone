@@ -35,15 +35,28 @@ int loadcell_test_main(int argc, char *argv[])
 	const char *verb = argv[1];
 
 
-	if (!strcmp(verb, "motor-calibration")) {
-		int pid = px4_task_spawn_cmd("ts_motor_test",
-				SCHED_DEFAULT,
-				SCHED_PRIORITY_DEFAULT,
-				1024,
-				motor_test,
-				(argv && argc > 2) ? (char *const *) &argv[2] : (char *const *) NULL);
+	if (!strcmp(verb, "motor-ramp")) {
+		int pid = px4_task_spawn_cmd("ts_motor_ramp_test",
+									SCHED_DEFAULT,
+									SCHED_PRIORITY_DEFAULT,
+									1024,
+									motor_test,
+									(argv && argc > 2) ? (char *const *) &argv[2] : (char *const *) NULL);
 		if (pid <= 0) {
-			errx(1, "failed to start motor test");
+			errx(1, "failed to start motor ramp test");
+			exit(0);
+		}
+	}
+
+	if (!strcmp(verb, "motor-step")) {
+		int pid = px4_task_spawn_cmd("ts_motor_step_test",
+									SCHED_DEFAULT,
+									SCHED_PRIORITY_DEFAULT,
+									1024,
+									motor_step_test,
+									(argv && argc > 2) ? (char *const *) &argv[2] : (char *const *) NULL);
+		if (pid <= 0) {
+			errx(1, "failed to start motor step test");
 			exit(0);
 		}
 	}
