@@ -22,7 +22,11 @@ int step_test(int argc, char *argv[])
 	orb_advert_t _actuator_test_pub = NULL;
 	struct ts_actuator_controls_s msg;
 
-	LoopTimer loopTimer(500000);//Loop Period 0.5s
+	uint64_t test_finish;
+	float test_elapsed = 0;
+
+	//LoopTimer loopTimer(500000);//Loop Period 0.5s
+	LoopTimer loopTimer(20000);
 
 	/* init all actuators to zero */
 	msg.timestamp = hrt_absolute_time();
@@ -55,6 +59,19 @@ int step_test(int argc, char *argv[])
 		}
 	}
 
+	//Gradually ramp down the motors
+	test_finish = hrt_absolute_time();
+
+	while(test_elapsed < 5.f){ //Ramp down in 5 seconds
+		loopTimer.wait();
+		test_elapsed = hrt_elapsed_time(&test_finish)/1e6f;
+		msg.timestamp = hrt_absolute_time();
+		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = left_en ? (1.f - (fabsf(test_elapsed) / 5.f)) : 0.f;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = right_en ? (1.f - (fabsf(test_elapsed) / 5.f)) : 0.f;;
+		msg.control[ts_actuator_controls_s::INDEX_DEGREE_LEFT] = 0;
+		msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = 0;
+		orb_publish(ORB_ID(ts_actuator_controls_0), _actuator_test_pub, &msg);
+	}
 
 
 	/* Disarm the system after finish */
