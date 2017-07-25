@@ -43,12 +43,12 @@ int motor_test(int argc, char*argv[])
 	uint64_t test_init = hrt_absolute_time();
 	float test_elapsed = 0;
 
-	while(test_elapsed < 30.f){ //Test for 30 seconds
+	while(test_elapsed < 60.f){ //Test for 60 seconds
 		loopTimer.wait();
 		test_elapsed = hrt_elapsed_time(&test_init)/1e6f;
 		msg.timestamp = hrt_absolute_time();
-		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = left_en ? (1.f - (fabsf(test_elapsed - 15.f) / 15.f)) : 0.f;
-		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = right_en ? (1.f - (fabsf(test_elapsed - 15.f) / 15.f)) : 0.f;;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_LEFT] = left_en ? (1.f - (fabsf(test_elapsed - 30.f) / 30.f)) : 0.f;
+		msg.control[ts_actuator_controls_s::INDEX_RPM_RIGHT] = right_en ? (1.f - (fabsf(test_elapsed - 30.f) / 30.f)) : 0.f;;
 		msg.control[ts_actuator_controls_s::INDEX_DEGREE_LEFT] = 0;
 		msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = 0;
 		orb_publish(ORB_ID(ts_actuator_controls_0), _actuator_test_pub, &msg);
