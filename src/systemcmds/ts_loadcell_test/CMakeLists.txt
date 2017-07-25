@@ -5,6 +5,8 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		ts_loadcell_test.cpp
+		step_test.cpp
+		motor_test.cpp
 	DEPENDS
 		platforms__common
 	)
