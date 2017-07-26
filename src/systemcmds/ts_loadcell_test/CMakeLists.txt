@@ -8,6 +8,7 @@ px4_add_module(
 		step_test.cpp
 		motor_test.cpp
 		motor_step_test.cpp
+		servo_step_test.cpp
 	DEPENDS
 		platforms__common
 	)
