@@ -74,6 +74,19 @@ int loadcell_test_main(int argc, char *argv[])
 		}
 	}
 
+	if (!strcmp(verb, "servo-step")) {
+		int pid = px4_task_spawn_cmd("ts_loadcell_servo_step_test",
+									SCHED_DEFAULT,
+									SCHED_PRIORITY_DEFAULT,
+									1024,
+									servo_step_test,
+									(argv && argc > 2) ? (char *const *) &argv[2] : (char *const *) NULL);
+		if (pid <= 0) {
+			errx(1, "failed to start ts loadcell servo step test");
+			exit(0);
+		}
+	}
+
 	if (!strcmp(verb, "stop")) {
 		test_should_exit = true;
 		exit(0);
