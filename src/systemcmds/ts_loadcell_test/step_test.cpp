@@ -10,10 +10,12 @@ int step_test(int argc, char *argv[])
 	if (!argv) errx(1, "Please provide enabled channels");
 	bool left_en = false;
 	bool right_en = false;
+	bool reverse = false;
 	//printf("%s %s", argv[0], argv[1]);
 	if (!strcmp(argv[1], "left")) left_en = true;
 	else if (!strcmp(argv[1], "right")) right_en = true;
 	else if (!strcmp(argv[1], "both")) left_en = right_en = true;
+	else if (!strcmp(argv[1], "reverse")) left_en = right_en = reverse =true;
 	else{
 		warnx("not recognized command exiting...");
 		exit(0);
@@ -25,8 +27,8 @@ int step_test(int argc, char *argv[])
 	uint64_t test_finish;
 	float test_elapsed = 0;
 
-	//LoopTimer loopTimer(500000);//Loop Period 0.5s
-	LoopTimer loopTimer(20000);
+	LoopTimer loopTimer(500000);//Loop Period 0.5s
+	//LoopTimer loopTimer(20000);
 
 	/* init all actuators to zero */
 	msg.timestamp = hrt_absolute_time();
@@ -52,6 +54,7 @@ int step_test(int argc, char *argv[])
 			float angle = -50.f + j *ANGLE_DELTA;
 			msg.control[ts_actuator_controls_s::INDEX_DEGREE_LEFT] = left_en ? ((i % 2) ? angle : -1.f * angle) : 0.0f;
 			msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = right_en ? ((i % 2) ? angle : -1.f * angle) : 0.0f;
+			if (reverse) msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT] = - msg.control[ts_actuator_controls_s::INDEX_DEGREE_RIGHT];
 			msg.timestamp = hrt_absolute_time();
 			if (test_should_exit) goto stop;
 			orb_publish(ORB_ID(ts_actuator_controls_0), _actuator_test_pub, &msg);
