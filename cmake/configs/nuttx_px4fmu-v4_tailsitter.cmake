@@ -15,7 +15,7 @@ set(config_module_list
 	drivers/stm32/adc
 	drivers/stm32/tone_alarm
 	drivers/led
-	drivers/px4fmu
+	drivers/tsfmu
 	drivers/boards/px4fmu-v4
 	drivers/rgbled
 	drivers/mpu6000
@@ -74,6 +74,7 @@ set(config_module_list
 	systemcmds/ver
 	systemcmds/sd_bench
 	systemcmds/motor_ramp
+	systemcmds/actuator_test
 
 	#
 	# Testing
@@ -87,6 +88,7 @@ set(config_module_list
 	modules/unit_test
 	modules/uORB/uORB_tests
 	systemcmds/tests
+	systemcmds/ts_loadcell_test
 
 	#
 	# General system control
@@ -132,6 +134,10 @@ set(config_module_list
 	modules/uORB
 	modules/dataman
 
+    #
+    # Custom mdules
+    modules/radsmeter
+
 	#
 	# Libraries
 	#
@@ -145,6 +151,7 @@ set(config_module_list
 	lib/geo_lookup
 	lib/conversion
 	lib/launchdetection
+	lib/LoopTimer
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
