@@ -70,7 +70,7 @@
 <name>__PX4_LINUX</name><value>1</value>
 </macro>
 <macro>
-<name>__cplusplus</name><value>1</value>
+<name>__cplusplus</name><value>201103L</value>
 </macro>
 <macro>
 <name>__EXPORT</name><value/>
