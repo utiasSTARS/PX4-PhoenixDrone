@@ -82,7 +82,7 @@ then
 		# Set the plugin path so Gazebo finds our model and sim
 		source $src_path/Tools/setup_gazebo.bash ${src_path} ${build_path}
 
-		gzserver --verbose ${src_path}/Tools/sitl_gazebo/worlds/${model}.world &
+		gzserver --verbose -u ${src_path}/Tools/sitl_gazebo/worlds/${model}.world &
 		SIM_PID=`echo $!`
 
 		if [[ -n "$HEADLESS" ]]; then
