@@ -6,7 +6,7 @@
  */
 
 
-
+#include <math.h>
 #include <px4_config.h>
 #include <px4_tasks.h>
 #include <sys/types.h>
@@ -20,7 +20,6 @@
 #include <poll.h>
 #include <errno.h>
 #include <stdio.h>
-#include <math.h>
 #include <unistd.h>
 
 #include <nuttx/arch.h>
@@ -123,6 +122,7 @@ public:
 
 	void print_info();
 	void perf_counter_reset();
+	void calibrate(int argc, char* argv[]);
 private:
 
 	bool _report_lock = true;
@@ -142,12 +142,14 @@ private:
 	int		_vehicle_cmd_sub;
 	int		_armed_sub;
 	int		_param_sub;
+	int		_esc_rads_sub;
 	orb_advert_t	_outputs_pub;
 	unsigned	_num_outputs;
 	int		_class_instance;
 
-
+	struct esc_rads_s  _esc_rads_msg;
 	volatile bool	_initialized;
+	volatile bool   _rotor_controller_init;
 	bool		_throttle_armed;
 	bool		_pwm_on;
 	uint32_t	_pwm_mask;
@@ -210,6 +212,11 @@ private:
 	volatile float _rads_r_raw;
 	orb_advert_t	_rads_pub;
 
+	/* PWM Calibration */
+	bool	_is_calib;
+	float	_outputs_calib[4];
+	sem_t 	_sem_timer_calib;
+
 	perf_counter_t	_ctl_latency;
 	perf_counter_t  _capture_cb;
 
@@ -270,6 +277,7 @@ private:
 
 	void safety_check_button(void);
 	void flash_safety_button(void);
+
 };
 
 const TSFMU::GPIOConfig TSFMU::_gpio_tab[] =	BOARD_FMU_GPIO_TAB;
@@ -295,10 +303,13 @@ TSFMU::TSFMU() :
 	_vehicle_cmd_sub(-1),
 	_armed_sub(-1),
 	_param_sub(-1),
+	_esc_rads_sub(-1),
 	_outputs_pub(nullptr),
 	_num_outputs(0),
 	_class_instance(0),
+	_esc_rads_msg{},
 	_initialized(false),
+	_rotor_controller_init(false),
 	_throttle_armed(false),
 	_pwm_on(false),
 	_pwm_mask(0),
@@ -340,6 +351,9 @@ TSFMU::TSFMU() :
 	_rads_l_raw(0.f),
 	_rads_r_raw(0.f),
 	_rads_pub(nullptr),
+	_is_calib(false),
+	_outputs_calib{0},
+	_sem_timer_calib{0},
 	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat")),
 	_capture_cb(perf_alloc(PC_ELAPSED, "capture callback")),
 	ridi_timediffs{0},
@@ -386,6 +400,13 @@ TSFMU::TSFMU() :
 	default_mixer_info.k_c = -1.f;
 	default_mixer_info.k_w2 = 0.f;//1.f;
 	default_mixer_info.k_w = 2.f;//1.f;
+	default_mixer_info.k_p = 10;
+	default_mixer_info.k_i = 5;
+	default_mixer_info.int_term_lim = 0.8;
+	default_mixer_info.p_term_lim = 0.8;
+	default_mixer_info.control_interval = SCHEDULE_INTERVAL;
+	default_mixer_info.integral_lim = 4;
+
 
 	_ts_mixer = new TailsitterMixer(ts_control_callback, (uintptr_t)_ts_controls, &default_mixer_info);
 	_ts_mixer->groups_required(_groups_required);
@@ -408,6 +429,7 @@ TSFMU::TSFMU() :
 	_debug_enabled = false;
 
 	sem_init(&_sem_timer, 0, 0);
+	sem_init(&_sem_timer_calib, 0, 1);
 }
 
 TSFMU::~TSFMU()
@@ -831,6 +853,7 @@ TSFMU::rads_task_main()
 		if (_rads_pub != nullptr) {
 			orb_publish(ORB_ID(esc_rads), _rads_pub, &esc_rads_msg);
 
+
 		} else {
 			_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
 		}
@@ -966,6 +989,7 @@ TSFMU::cycle()
 
 		_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 		_param_sub = orb_subscribe(ORB_ID(parameter_update));
+		_esc_rads_sub = orb_subscribe(ORB_ID(esc_rads));
 
 		/* initialize PWM limit lib */
 		pwm_limit_init(&_pwm_limit);//set limit->state=PWM_LIMIT_STATE_INIT, limit->time_armed = 0
@@ -1094,12 +1118,72 @@ TSFMU::cycle()
 			}
 
 			/* do mixing */
-			float outputs[_max_actuators];
-			num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
+			float outputs[_max_actuators] = {0};
+
+			/* check esc rads updates*/
+			px4_pollfd_struct_t fds[1];
+			bool meas_valid = true;
+			struct esc_rads_s	esc_rads_msg;
+
+			fds[0].fd = _esc_rads_sub;
+			fds[0].events = POLLIN;
+
+			int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
+
+			/* timed out */
+			if (pret == 0) {
+				//warn("esc rads: poll time out %d, %d", pret, errno);
+			}
+
+			/* this is undesirable but not much we can do - might want to flag unhappy status */
+			if (pret < 0) {
+				warn("esc rads: poll error %d, %d", pret, errno);
+				/* sleep a bit before next try */
+				usleep(100000);
+				meas_valid = false;
+			}
+
+			/* read esc_rads and setup pi controller*/
+			if (pret > 0 && (fds[0].revents & POLLIN)) {
+				orb_copy(ORB_ID(esc_rads), _esc_rads_sub, &esc_rads_msg);
+				_esc_rads_msg = esc_rads_msg;
+
+				float esc_rads_meas[2] = {_esc_rads_msg.rads_filtered[0],
+										   _esc_rads_msg.rads_filtered[1]};
+				_ts_mixer->set_curr_omega(esc_rads_meas);
+			}
+
+			/*pi controller controls*/
+			if (_rotor_controller_init){
+				_ts_mixer->set_curr_omega_valid(meas_valid);
+				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
+			}
+			else{
+				_ts_mixer->init_rotor_controller();
+				_rotor_controller_init = true;
+			}
+
+			/*if the rads measurement is outdated, keep the previous control*/
+			if (!meas_valid){
+				outputs[0] = _outputs[0];
+				outputs[1] = _outputs[1];
+			}
+
 
 			/* disable unused ports by setting their output to NaN */
 			outputs[2] = NAN_VALUE;
 			outputs[3] = NAN_VALUE;
+
+			/* override outputs with cmd line input if calibrating*/
+			if (_is_calib){
+				int sem_value;
+				sem_getvalue(&_sem_timer_calib, &sem_value);
+				if (sem_value == 0){
+					sem_wait(&_sem_timer_calib);
+					sem_post(&_sem_timer_calib);
+				}
+				memcpy(outputs, _outputs_calib, sizeof(_outputs_calib));
+			}
 
 			memcpy(_outputs, outputs, sizeof(outputs));
 
@@ -1109,7 +1193,7 @@ TSFMU::cycle()
 			pwm_limit_calc(_throttle_armed, arm_nothrottle(), num_outputs, _reverse_pwm_mask,
 				       _disarmed_pwm, _min_pwm, _max_pwm, outputs, pwm_limited, &_pwm_limit);
 
-
+			//warn("pre_armed: %d",arm_nothrottle());
 			/* overwrite outputs in case of force_failsafe with _failsafe_pwm PWM values */
 			if (_armed.force_failsafe) {
 				for (size_t i = 0; i < num_outputs; i++) {
@@ -1700,6 +1784,48 @@ TSFMU::peripheral_reset(int ms)
 
 	board_peripheral_reset(ms);
 }
+void
+TSFMU::calibrate(int argc, char *argv[])
+{
+	if (argc < 5){
+		errx(1, "tsfmu calibrate <pwm_CH1> <pwm_CH2> <pwm_CH4> <pwm_CH5>");
+	}
+
+	actuator_armed_s aa;
+
+	aa.armed = true;
+	aa.prearmed = true;
+	aa.ready_to_arm = true;
+	aa.lockdown = false;
+	aa.manual_lockdown = false;
+	aa.force_failsafe = false;
+	aa.in_esc_calibration_mode = false;
+
+
+	orb_advert_t handle = orb_advertise(ORB_ID(actuator_armed), &aa);
+	if (handle == nullptr) {
+		errx(1, "advertise failed 2");
+	}
+
+	orb_unadvertise(handle);
+
+	_is_calib = true;
+
+	float pwm_outputs[4];
+
+	pwm_outputs[0] = strtof(argv[1], 0);
+
+	pwm_outputs[1] = strtof(argv[2], 0);
+
+	pwm_outputs[2] = strtof(argv[3], 0);
+
+	pwm_outputs[3] = strtof(argv[4], 0);
+
+	sem_wait(&_sem_timer_calib);
+	memcpy(_outputs_calib, pwm_outputs, sizeof(pwm_outputs));
+	sem_post(&_sem_timer_calib);
+
+}
 
 void
 TSFMU::gpio_reset(void)
@@ -2062,6 +2188,12 @@ TSFMU::print_info()
 	printf("_throttle_armed: ");
 	if (_throttle_armed) printf("TRUE\n");
 	else printf("FALSE\n");
+
+	printf("_armed: ");
+		if (_armed.armed) printf("TRUE\n");
+		else printf("FALSE\n");
+
+
 
 	printf("Mixer Output: ");
 	for (int i = 0; i < _max_actuators; i++){
@@ -2465,6 +2597,11 @@ tsfmu_main(int argc, char *argv[])
 
 	if (!strcmp(verb, "test")) {
 		test();
+	}
+
+	if (!strcmp(verb, "calibrate")){
+		if(g_fmu != NULL) g_fmu->calibrate(argc -1, argv + 1);
+		exit(0);
 	}
 
 	if (!strcmp(verb, "perf-reset")) {
