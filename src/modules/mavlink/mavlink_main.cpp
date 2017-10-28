@@ -2137,7 +2137,7 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("MISSION_ITEM", 50.0f);
 		configure_stream("ACTUATOR_CONTROL_TARGET0", 30.0f);
 		configure_stream("MANUAL_CONTROL", 5.0f);
-		configure_stream("ESC_RADS", 25.0f);
+		configure_stream("ESC_RADS", 250.0f);
 		break;
 
 	case MAVLINK_MODE_IRIDIUM:
