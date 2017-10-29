@@ -56,6 +56,7 @@
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/safety.h>
+#include <uORB/topics/battery_status.h>
 
 
 #include <systemlib/circuit_breaker.h>
@@ -78,7 +79,7 @@
 #define TIMEOUT_MS 200
 #define CH_TIMEOUT_MS 100
 #define MED_FIL_ENTRY 5
-#define CALIB_NUM_INTVL 50
+#define CALIB_NUM_INTVL 10
 
 /*
  * Define the various LED flash sequences for each system state.
@@ -124,7 +125,7 @@ public:
 
 	void print_info();
 	void perf_counter_reset();
-	void calibrate(int argc, char* argv[]);
+	void calibrate(char* argv);
 	void update_mixer_params(int argc, char *argv[]);
 private:
 
@@ -144,15 +145,19 @@ private:
 	uint32_t	_pwm_alt_rate_channels;
 	unsigned	_current_update_rate;
 	struct work_s	_work;
+
 	int		_vehicle_cmd_sub;
 	int		_armed_sub;
 	int		_param_sub;
 	int		_esc_rads_sub;
+	int		_batt_status_sub;
 	orb_advert_t	_outputs_pub;
 	unsigned	_num_outputs;
 	int		_class_instance;
 
 	struct esc_rads_s  _esc_rads_msg;
+	battery_status_s   _batt_status_msg;
+
 	volatile bool	_initialized;
 	volatile bool   _rotor_controller_init;
 	bool		_throttle_armed;
@@ -195,6 +200,7 @@ private:
 
 	float _mot_t_max;	// maximum rise time for motor (slew rate limiting)
 	float _thr_mdl_fac;	// thrust to pwm modelling factor
+	float _curr_batt_volt;
 
 	/* Motor RPM Pulse Detection */
 	bool _rads_task_should_exit;
@@ -225,6 +231,7 @@ private:
 	int 	_esc_rads_curr_indx_calib;
 	float   _esc_rads_avg_calib[2];
 	sem_t 	_sem_timer_calib;
+	struct work_s	_work_calib;
 
 
 	perf_counter_t	_ctl_latency;
@@ -243,6 +250,12 @@ private:
 	void		cycle();
 	void		work_start();
 	void		work_stop();
+
+	static void fit_curve_trampoline(void *arg);
+	void		fit_curve();
+
+	static void pid_trampoline(void *arg);
+	void		calc_pid_param();
 
 	static int ts_control_callback(uintptr_t handle,
 					 uint8_t control_group,
@@ -314,10 +327,12 @@ TSFMU::TSFMU() :
 	_armed_sub(-1),
 	_param_sub(-1),
 	_esc_rads_sub(-1),
+	_batt_status_sub(-1),
 	_outputs_pub(nullptr),
 	_num_outputs(0),
 	_class_instance(0),
 	_esc_rads_msg{},
+	_batt_status_msg{},
 	_initialized(false),
 	_rotor_controller_init(false),
 	_throttle_armed(false),
@@ -342,6 +357,7 @@ TSFMU::TSFMU() :
 	_to_mixer_status(nullptr),
 	_mot_t_max(0.0f),
 	_thr_mdl_fac(0.0f),
+	_curr_batt_volt(0.0f),
 	_rads_task_should_exit(false),
 	_rads_task(-1),
 	_sem_timer{0},
@@ -368,6 +384,7 @@ TSFMU::TSFMU() :
 	_esc_rads_curr_indx_calib(0),
 	_esc_rads_avg_calib{0},
 	_sem_timer_calib{0},
+	_work_calib{},
 	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat")),
 	_capture_cb(perf_alloc(PC_ELAPSED, "capture callback")),
 	ridi_timediffs{0},
@@ -958,6 +975,365 @@ TSFMU::capture_callback(uint32_t chan_index,
 	perf_end(_capture_cb);
 }
 
+
+void
+TSFMU::calibrate(char* argv){
+	if (!strcmp(argv, "fit"))
+		work_queue(LPWORK, &_work_calib, (worker_t)&TSFMU::fit_curve_trampoline, this, 0);
+	if (!strcmp(argv, "pid"))
+		work_queue(LPWORK, &_work_calib, (worker_t)&TSFMU::pid_trampoline, this, 0);
+}
+
+void
+TSFMU::fit_curve_trampoline(void * arg){
+	TSFMU *dev = reinterpret_cast<TSFMU *>(arg);
+
+	dev->fit_curve();
+}
+
+
+void
+TSFMU::fit_curve(){
+	actuator_armed_s aa;
+
+	aa.armed = true;
+	aa.prearmed = true;
+	aa.ready_to_arm = true;
+	aa.lockdown = false;
+	aa.manual_lockdown = false;
+	aa.force_failsafe = false;
+	aa.in_esc_calibration_mode = false;
+
+
+	orb_advert_t handle = orb_advertise(ORB_ID(actuator_armed), &aa);
+	if (handle == nullptr) {
+		errx(1, "advertise failed 2");
+	}
+
+	orb_unadvertise(handle);
+
+	usleep(4000000);
+	_is_calib = true;
+
+	float pwm_outputs[4];
+	float esc_rads_avg[2];
+
+	int num_intervals = CALIB_NUM_INTVL;
+	float h = 2.f / num_intervals;
+
+	FILE *fd;
+	float A_l[num_intervals][3];
+	float A_r[num_intervals][3];
+	float y_l[num_intervals];
+	float y_r[num_intervals];
+
+
+	for (int i=0; i<num_intervals; i++){
+		for(int j=0; j<2; j++){
+			pwm_outputs[j] = -1.f + 0.01f + i * h;
+			pwm_outputs[j] = (pwm_outputs[j] > 1) ? 1 : pwm_outputs[j];
+			pwm_outputs[j+2] = 0;
+		}
+		sem_wait(&_sem_timer_calib);
+
+		memcpy(_outputs_calib, pwm_outputs, sizeof(pwm_outputs));
+		sem_post(&_sem_timer_calib);
+
+		usleep(800000);
+
+		sem_wait(&_sem_timer_calib);
+		memcpy(esc_rads_avg, _esc_rads_avg_calib, sizeof(_esc_rads_avg_calib));
+		sem_post(&_sem_timer_calib);
+		printf("PWM1: %.2f, PWM2: %.2f, RPM_L: %.2f, RMP_R: %.2f, RPM_L_AVG: %.2f, RPM_R_AVG:%.2f\n",
+							(double) pwm_outputs[0], (double) pwm_outputs[1],
+							(double) (_esc_rads_msg.rads_filtered[0]  * 60.f / (2.f*PI)), (double) (_esc_rads_msg.rads_filtered[1]  * 60.f / (2.f*PI)),
+							(double) (esc_rads_avg[0] * 60 / (2.f * PI)),(double) (esc_rads_avg[1] * 60 / (2.f * PI)));
+
+		y_l[i] = pwm_outputs[0];
+		y_r[i] = pwm_outputs[1];
+
+		A_l[i][0] = esc_rads_avg[0] * esc_rads_avg[0];
+		A_l[i][1] = esc_rads_avg[0];
+		A_l[i][2] = 1;
+
+		A_r[i][0] = esc_rads_avg[1] * esc_rads_avg[1];
+		A_r[i][1] = esc_rads_avg[1];
+		A_r[i][2] = 1;
+
+		char buffer[100] = {0};
+		if(i==0)
+			fd = fopen("/fs/microsd/rotor_calib.txt", "w");
+		else
+			fd = fopen("/fs/microsd/rotor_calib.txt", "a");
+		int buffer_len;
+		int bytes_written;
+
+		if (fd != NULL) {
+			sprintf(buffer,"%.5f %.5f %.5f %.5f\n",(double) pwm_outputs[0],
+												   (double) pwm_outputs[1],
+												   (double) esc_rads_avg[0],
+												   (double) esc_rads_avg[1]);
+			buffer_len = strlen(buffer) + 1;
+			bytes_written = fwrite(buffer, 1, buffer_len, fd);
+			if (bytes_written != buffer_len) {
+				warn("fwrite() %d bytes returned less than expected %d", buffer_len, bytes_written);
+			}
+
+			fflush(fd);
+			fclose(fd);
+
+		}
+		else{
+			warn("Can not open file!");
+		}
+	}
+
+//  linear regression test
+//	for(int j=0; j<CALIB_NUM_INTVL; j++){
+//		A_l[j][0] = j*j;
+//		A_l[j][1] = j;
+//		A_l[j][2] = 1;
+//		y_l[j] = j*j + 2 * j + 3;
+//		A_r[j][0] = j*j;
+//		A_r[j][1] = j;
+//		A_r[j][2] = 1;
+//		y_r[j] = 1.5 * j*j + 3.43 * j + 5.24;
+//	}
+
+
+
+	math::Matrix<CALIB_NUM_INTVL, 3> A(A_l);
+	math::Matrix<3, CALIB_NUM_INTVL> AT = A.transposed();
+	math::Vector<CALIB_NUM_INTVL> y(y_l);
+	math::Matrix<3,3> ATA_inv = (AT * A).inversed();
+	math::Vector<3> coeff_l = (ATA_inv * AT) * y;
+
+	A.set(A_r);
+	AT = A.transposed();
+	y.set(y_r);
+	ATA_inv = (AT * A).inversed();
+	math::Vector<3> coeff_r = (ATA_inv * AT) * y;
+
+	printf("pwm-omega fit results,\n L: %.10f, %.10f, %.10f\n R: %.10f, %.10f, %.10f\n",
+			(double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
+			(double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
+	printf("curr voltage: %.5f",(double) _curr_batt_volt);
+
+	pwm_outputs[0] = -1;
+
+	pwm_outputs[1] = -1;
+	memcpy(_outputs_calib, pwm_outputs, sizeof(pwm_outputs));
+	usleep(5e6);
+	_is_calib = false;
+}
+
+void
+TSFMU::pid_trampoline(void * arg){
+	TSFMU *dev = reinterpret_cast<TSFMU *>(arg);
+
+	dev->calc_pid_param();
+}
+
+void
+TSFMU::calc_pid_param(){
+	orb_advert_t handle;
+	actuator_armed_s aa;
+	if(_pwm_limit.state != PWM_LIMIT_STATE_ON){
+		aa.armed = true;
+		aa.prearmed = true;
+		aa.ready_to_arm = true;
+		aa.lockdown = false;
+		aa.manual_lockdown = false;
+		aa.force_failsafe = false;
+		aa.in_esc_calibration_mode = false;
+
+
+		handle = orb_advertise(ORB_ID(actuator_armed), &aa);
+		if (handle == nullptr) {
+			errx(1, "advertise failed 2");
+		}
+
+		orb_unadvertise(handle);
+	}
+
+
+	ts_actuator_controls_s ac;
+
+	ac.control[0] = 0.f;
+
+	ac.control[1] = 0.f;
+
+	ac.control[2] = 0.f;
+
+	ac.control[3] = 0.f;
+
+	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
+
+	if (handle == nullptr) {
+		errx(1, "advertise failed");
+	}
+	printf("published first cmd\n");
+	usleep(8000000);
+
+
+	ac.control[0] = 300.f;
+
+	ac.control[1] = 300.f;
+
+	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
+
+	if (handle == nullptr) {
+		errx(1, "advertise failed");
+	}
+	printf("published 500 cmd\n");
+	usleep(4000000);
+
+	esc_rads_s esc_rads_msg;
+	int esc_rads_sub = -1;
+	esc_rads_sub = orb_subscribe(ORB_ID(esc_rads));
+	px4_pollfd_struct_t fds[1];
+	fds[0].fd = esc_rads_sub;
+	fds[0].events = POLLIN;
+
+	int pret = 0;
+	while(pret<=0){
+		pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
+		/* timed out */
+		if (pret == 0) {
+			//warn("esc rads: poll time out %d, %d", pret, errno);
+		}
+
+		/* this is undesirable but not much we can do - might want to flag unhappy status */
+		if (pret < 0) {
+			warn("esc rads: poll error %d, %d", pret, errno);
+		}
+
+		/* read esc_rads and setup pi controller*/
+		if (pret > 0 && (fds[0].revents & POLLIN)) {
+			orb_copy(ORB_ID(esc_rads), esc_rads_sub, &esc_rads_msg);
+		}
+	}
+
+
+	float start[2]= {esc_rads_msg.rads_filtered[0], esc_rads_msg.rads_filtered[1]};
+	int hit_check_point[2] = {2,0};
+	int hit_check_point1[2] = {2,0};
+	float jump_step = 200.f;
+	float check_point_10[2] = {start[0],
+			                   start[1]};
+	float check_point_90[2] = {start[0] + jump_step * 0.63f,
+							   start[1] + jump_step * 0.63f};
+
+//	float check_point_10[2] = {start[0] + jump_step * 0.1f,
+//							   start[1] + jump_step * 0.1f};
+//	float check_point_90[2] = {start[0] + jump_step * 0.90f,
+//							   start[1] + jump_step * 0.90f};
+
+	float omega_cp[2] = {0.f, 0.f};
+	float omega_cp1[2] = {0.f, 0.f};
+
+	math::Vector<2> time_cp_10(0,0);
+	math::Vector<2> time_cp_90(0,0);
+
+	math::Vector<2> time_cp1_10(0,0);
+	math::Vector<2> time_cp1_90(0,0);
+
+	ac.control[0] = start[0] + jump_step;
+	ac.control[1] = start[1] + jump_step;
+
+	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
+	if (handle == nullptr) {
+		errx(1, "advertise failed");
+	}
+	printf("published 2nd cmd");
+	orb_unadvertise(handle);
+
+	int count = 0;
+
+	while(hit_check_point[1] != 2 || hit_check_point1[1] != 2){
+		pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
+
+		/* timed out */
+		if (pret == 0) {
+			//warn("esc rads: poll time out %d, %d", pret, errno);
+		}
+
+		/* this is undesirable but not much we can do - might want to flag unhappy status */
+		if (pret < 0) {
+			warn("esc rads: poll error %d, %d", pret, errno);
+		}
+
+		/* read esc_rads and setup pi controller*/
+		if (pret > 0 && (fds[0].revents & POLLIN)) {
+			count++;
+			orb_copy(ORB_ID(esc_rads), esc_rads_sub, &esc_rads_msg);
+		}
+
+		for(int i = 1; i<2; i++){
+			if(esc_rads_msg.rads_filtered[i] >= check_point_10[i] && hit_check_point[i] == 0){
+				time_cp_10(i) = (float) hrt_absolute_time();
+				hit_check_point[i]++;
+				omega_cp[0] = esc_rads_msg.rads_filtered[i];
+			}
+
+			if(esc_rads_msg.rads_raw[i] >= check_point_10[i] && hit_check_point1[i] == 0){
+				time_cp1_10(i) = (float) hrt_absolute_time();
+				hit_check_point1[i]++;
+				omega_cp1[0] = esc_rads_msg.rads_raw[i];
+			}
+
+			if(esc_rads_msg.rads_filtered[i] >= check_point_90[i] && hit_check_point[i] == 1){
+				time_cp_90(i) = (float) hrt_absolute_time();
+				hit_check_point[i]++;
+				omega_cp[1] = esc_rads_msg.rads_filtered[i];
+			}
+
+			if(esc_rads_msg.rads_raw[i] >= check_point_90[i] && hit_check_point1[i] == 1){
+				time_cp1_90(i) = (float) hrt_absolute_time();
+				hit_check_point1[i]++;
+				omega_cp1[1] = esc_rads_msg.rads_raw[i];
+			}
+		}
+	}
+	printf("checked %d\n", count);
+
+	math::Vector<2> rise_time = (time_cp_90 - time_cp_10) / 1e6f;
+	math::Vector<2> rise_time1 = (time_cp1_90 - time_cp1_10) / 1e6f;
+	printf("omega start: %.10f, %.10f\n", (double) start[0], (double) start[1]);
+	printf("omega: %.10f, %.10f\n", (double) omega_cp[0], (double) omega_cp[1]);
+	printf("filtered rise time: %.10f, %.10f\n", (double) rise_time(0), (double) rise_time(1));
+	printf("omega: %.10f, %.10f\n", (double) omega_cp1[0], (double) omega_cp1[1]);
+	printf("raw rise time: %.10f, %.10f\n", (double) rise_time1(0), (double) rise_time1(1));
+
+	rise_time(0) = 0.02;
+	math::Vector<2> xi_recip = rise_time * _mixer_info.k_p;
+	math::Vector<2> des_ki = xi_recip * 8100.f;
+	math::Vector<2> des_kp = xi_recip * 1.4f * 90.f;
+
+	printf("Xi: %,3f, %.3f\n", (double) (1 / xi_recip(0)), (double) (1 / xi_recip(1)));
+	printf("Desired Ki %.6f, %.6f\n", (double) des_ki(0), (double) des_ki(1));
+	printf("Desired kp %.6f, %.6f\n", (double) des_kp(0), (double) des_kp(1));
+
+	usleep(2000000);
+
+	aa.armed = false;
+	aa.prearmed = true;
+	aa.ready_to_arm = true;
+	aa.lockdown = false;
+	aa.manual_lockdown = false;
+	aa.force_failsafe = false;
+	aa.in_esc_calibration_mode = false;
+
+	handle = orb_advertise(ORB_ID(actuator_armed), &aa);
+	if (handle == nullptr) {
+		errx(1, "advertise failed 2");
+	}
+
+	orb_unadvertise(handle);
+
+}
+
+
 //Bubble sort implementation of finding median, timer input capture tends to
 //miss edges or overcount edges
 uint64_t
@@ -1007,6 +1383,7 @@ TSFMU::cycle()
 		_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 		_param_sub = orb_subscribe(ORB_ID(parameter_update));
 		_esc_rads_sub = orb_subscribe(ORB_ID(esc_rads));
+		_batt_status_sub = orb_subscribe(ORB_ID(battery_status));
 
 		/* initialize PWM limit lib */
 		pwm_limit_init(&_pwm_limit);//set limit->state=PWM_LIMIT_STATE_INIT, limit->time_armed = 0
@@ -1199,7 +1576,7 @@ TSFMU::cycle()
 				}
 				_ts_mixer->set_curr_omega_valid(meas_valid);
 				// TODO: get voltage from topics
-				_ts_mixer->update_mixer_info(12.5f);
+				//_ts_mixer->update_mixer_info(12.5f);
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
 			}
@@ -1338,6 +1715,12 @@ TSFMU::cycle()
 		}
 	}
 
+	orb_check(_batt_status_sub, &updated);
+	if (updated) {
+		orb_copy(ORB_ID(actuator_armed), _batt_status_sub, &_batt_status_msg);
+		_curr_batt_volt = _batt_status_msg.voltage_v;
+	}
+
 
 	orb_check(_param_sub, &updated);
 
@@ -1397,6 +1780,7 @@ TSFMU::cycle()
 void TSFMU::work_stop()
 {
 	work_cancel(HPWORK, &_work);
+	work_cancel(HPWORK, &_work_calib);
 
 	for (unsigned i = 0; i < ts_actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) {
 		if (_ts_control_subs[i] > 0) {
@@ -1407,6 +1791,8 @@ void TSFMU::work_stop()
 
 	orb_unsubscribe(_armed_sub);
 	orb_unsubscribe(_param_sub);
+	orb_unsubscribe(_batt_status_sub);
+	orb_unsubscribe(_esc_rads_sub);
 
 	/* make sure servos are off */
 	up_pwm_servo_deinit();
@@ -1854,325 +2240,6 @@ TSFMU::peripheral_reset(int ms)
 	}
 
 	board_peripheral_reset(ms);
-}
-void
-TSFMU::calibrate(int argc, char *argv[])
-{
-	actuator_armed_s aa;
-
-	aa.armed = true;
-	aa.prearmed = true;
-	aa.ready_to_arm = true;
-	aa.lockdown = false;
-	aa.manual_lockdown = false;
-	aa.force_failsafe = false;
-	aa.in_esc_calibration_mode = false;
-
-
-	orb_advert_t handle = orb_advertise(ORB_ID(actuator_armed), &aa);
-	if (handle == nullptr) {
-		errx(1, "advertise failed 2");
-	}
-
-	orb_unadvertise(handle);
-
-	usleep(4000000);
-	_is_calib = true;
-
-	float pwm_outputs[4];
-	float esc_rads_avg[2];
-
-	int num_intervals = CALIB_NUM_INTVL;
-	float h = 2.f / num_intervals;
-
-	FILE *fd;
-	float A_l[num_intervals][3];
-	float A_r[num_intervals][3];
-	float y_l[num_intervals];
-	float y_r[num_intervals];
-
-
-	for (int i=0; i<num_intervals; i++){
-		for(int j=0; j<2; j++){
-			pwm_outputs[j] = -1.f + 0.01f + i * h;
-			pwm_outputs[j] = (pwm_outputs[j] > 1) ? 1 : pwm_outputs[j];
-			pwm_outputs[j+2] = 0;
-		}
-		sem_wait(&_sem_timer_calib);
-
-		memcpy(_outputs_calib, pwm_outputs, sizeof(pwm_outputs));
-		sem_post(&_sem_timer_calib);
-
-		usleep(800000);
-
-		sem_wait(&_sem_timer_calib);
-		memcpy(esc_rads_avg, _esc_rads_avg_calib, sizeof(_esc_rads_avg_calib));
-		sem_post(&_sem_timer_calib);
-		printf("PWM1: %.2f, PWM2: %.2f, RPM_L: %.2f, RMP_R: %.2f, RPM_L_AVG: %.2f, RPM_R_AVG:%.2f\n",
-							(double) pwm_outputs[0], (double) pwm_outputs[1],
-							(double) (_esc_rads_msg.rads_filtered[0]  * 60.f / (2.f*PI)), (double) (_esc_rads_msg.rads_filtered[1]  * 60.f / (2.f*PI)),
-							(double) (esc_rads_avg[0] * 60 / (2.f * PI)),(double) (esc_rads_avg[1] * 60 / (2.f * PI)));
-
-		y_l[i] = pwm_outputs[0];
-		y_r[i] = pwm_outputs[1];
-
-		A_l[i][0] = esc_rads_avg[0] * esc_rads_avg[0];
-		A_l[i][1] = esc_rads_avg[0];
-		A_l[i][2] = 1;
-
-		A_r[i][0] = esc_rads_avg[1] * esc_rads_avg[1];
-		A_r[i][1] = esc_rads_avg[1];
-		A_r[i][2] = 1;
-
-		char buffer[100] = {0};
-		if(i==0)
-			fd = fopen("/fs/microsd/rotor_calib.txt", "w");
-		else
-			fd = fopen("/fs/microsd/rotor_calib.txt", "a");
-		int buffer_len;
-		int bytes_written;
-
-		if (fd != NULL) {
-			sprintf(buffer,"%.5f %.5f %.5f %.5f\n",(double) pwm_outputs[0],
-												   (double) pwm_outputs[1],
-												   (double) esc_rads_avg[0],
-												   (double) esc_rads_avg[1]);
-			buffer_len = strlen(buffer) + 1;
-			bytes_written = fwrite(buffer, 1, buffer_len, fd);
-			if (bytes_written != buffer_len) {
-				warn("fwrite() %d bytes returned less than expected %d", buffer_len, bytes_written);
-			}
-
-			fflush(fd);
-			fclose(fd);
-
-		}
-		else{
-			warn("Can not open file!");
-		}
-	}
-
-//  linear regression test
-//	for(int j=0; j<NUM_INTVL_CALIB; j++){
-//		A_l[j][0] = j*j;
-//		A_l[j][1] = j;
-//		A_l[j][2] = 1;
-//		y_l[j] = j*j + 2 * j + 3;
-//		A_r[j][0] = j*j;
-//		A_r[j][1] = j;
-//		A_r[j][2] = 1;
-//		y_r[j] = 1.5 * j*j + 3.43 * j + 5.24;
-//	}
-
-
-
-	math::Matrix<CALIB_NUM_INTVL, 3> A(A_l);
-	math::Matrix<3, CALIB_NUM_INTVL> AT = A.transposed();
-	math::Vector<CALIB_NUM_INTVL> y(y_l);
-	math::Matrix<3,3> ATA_inv = (AT * A).inversed();
-	math::Vector<3> coeff_l = (ATA_inv * AT) * y;
-
-	A.set(A_r);
-	AT = A.transposed();
-	y.set(y_r);
-	ATA_inv = (AT * A).inversed();
-	math::Vector<3> coeff_r = (ATA_inv * AT) * y;
-
-	printf("pwm-omega fit results,\n L: %.10f, %.10f, %.10f\n R: %.10f, %.10f, %.10f\n",
-			(double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
-			(double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
-
-	pwm_outputs[0] = -1;
-
-	pwm_outputs[1] = -1;
-	memcpy(_outputs_calib, pwm_outputs, sizeof(pwm_outputs));
-	usleep(1e6);
-	_is_calib = false;
-
-	/*test rise time*/
-
-//	ts_actuator_controls_s ac;
-//
-//	ac.control[0] = 0.f;
-//
-//	ac.control[1] = 0.f;
-//
-//	ac.control[2] = 0.f;
-//
-//	ac.control[3] = 0.f;
-//
-//	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
-//
-//	if (handle == nullptr) {
-//		errx(1, "advertise failed");
-//	}
-//	printf("published first cmd\n");
-//	usleep(8000000);
-//
-//
-//	ac.control[0] = 300.f;
-//
-//	ac.control[1] = 300.f;
-//
-//	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
-//
-//	if (handle == nullptr) {
-//		errx(1, "advertise failed");
-//	}
-//	printf("published 500 cmd\n");
-//	usleep(4000000);
-//
-//	esc_rads_s esc_rads_msg;
-//	int esc_rads_sub = -1;
-//	esc_rads_sub = orb_subscribe(ORB_ID(esc_rads));
-//	px4_pollfd_struct_t fds[1];
-//	fds[0].fd = esc_rads_sub;
-//	fds[0].events = POLLIN;
-//
-//	int pret = 0;
-//	while(pret<=0){
-//		pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
-//		/* timed out */
-//		if (pret == 0) {
-//			//warn("esc rads: poll time out %d, %d", pret, errno);
-//		}
-//
-//		/* this is undesirable but not much we can do - might want to flag unhappy status */
-//		if (pret < 0) {
-//			warn("esc rads: poll error %d, %d", pret, errno);
-//		}
-//
-//		/* read esc_rads and setup pi controller*/
-//		if (pret > 0 && (fds[0].revents & POLLIN)) {
-//			orb_copy(ORB_ID(esc_rads), esc_rads_sub, &esc_rads_msg);
-//		}
-//	}
-//
-//
-//
-////	sem_wait(&_sem_timer_calib);
-////	memcpy(&esc_rads_msg, &_esc_rads_msg, sizeof(_esc_rads_msg));
-////	sem_post(&_sem_timer_calib);
-//
-//	float start[2]= {esc_rads_msg.rads_filtered[0], esc_rads_msg.rads_filtered[1]};
-//	int hit_check_point[2] = {2,0};
-//	int hit_check_point1[2] = {2,0};
-//	float jump_step = 200.f;
-//	float check_point_10[2] = {start[0],
-//			                   start[1]};
-//	float check_point_90[2] = {start[0] + jump_step * 0.63f,
-//							   start[1] + jump_step * 0.63f};
-//
-////	float check_point_10[2] = {start[0] + jump_step * 0.1f,
-////							   start[1] + jump_step * 0.1f};
-////	float check_point_90[2] = {start[0] + jump_step * 0.90f,
-////							   start[1] + jump_step * 0.90f};
-//
-//	float omega_cp[2] = {0.f, 0.f};
-//	float omega_cp1[2] = {0.f, 0.f};
-//
-//	math::Vector<2> time_cp_10(0,0);
-//	math::Vector<2> time_cp_90(0,0);
-//
-//	math::Vector<2> time_cp1_10(0,0);
-//	math::Vector<2> time_cp1_90(0,0);
-//
-//	ac.control[0] = start[0] + jump_step;
-//	ac.control[1] = start[1] + jump_step;
-//
-//	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
-//	if (handle == nullptr) {
-//		errx(1, "advertise failed");
-//	}
-//	printf("published 2nd cmd");
-//	orb_unadvertise(handle);
-//
-//	int count = 0;
-//
-//	while(hit_check_point[1] != 2 || hit_check_point1[1] != 2){
-//		pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
-//
-//		/* timed out */
-//		if (pret == 0) {
-//			//warn("esc rads: poll time out %d, %d", pret, errno);
-//		}
-//
-//		/* this is undesirable but not much we can do - might want to flag unhappy status */
-//		if (pret < 0) {
-//			warn("esc rads: poll error %d, %d", pret, errno);
-//		}
-//
-//		/* read esc_rads and setup pi controller*/
-//		if (pret > 0 && (fds[0].revents & POLLIN)) {
-//			count++;
-//			orb_copy(ORB_ID(esc_rads), esc_rads_sub, &esc_rads_msg);
-//		}
-//
-//		for(int i = 1; i<2; i++){
-//			if(esc_rads_msg.rads_filtered[i] >= check_point_10[i] && hit_check_point[i] == 0){
-//				time_cp_10(i) = (float) hrt_absolute_time();
-//				hit_check_point[i]++;
-//				omega_cp[0] = esc_rads_msg.rads_filtered[i];
-//			}
-//
-//			if(esc_rads_msg.rads_raw[i] >= check_point_10[i] && hit_check_point1[i] == 0){
-//				time_cp1_10(i) = (float) hrt_absolute_time();
-//				hit_check_point1[i]++;
-//				omega_cp1[0] = esc_rads_msg.rads_raw[i];
-//			}
-//
-//			if(esc_rads_msg.rads_filtered[i] >= check_point_90[i] && hit_check_point[i] == 1){
-//				time_cp_90(i) = (float) hrt_absolute_time();
-//				hit_check_point[i]++;
-//				omega_cp[1] = esc_rads_msg.rads_filtered[i];
-//			}
-//
-//			if(esc_rads_msg.rads_raw[i] >= check_point_90[i] && hit_check_point1[i] == 1){
-//				time_cp1_90(i) = (float) hrt_absolute_time();
-//				hit_check_point1[i]++;
-//				omega_cp1[1] = esc_rads_msg.rads_raw[i];
-//			}
-//		}
-//	}
-//	printf("checked %d\n", count);
-//
-//	math::Vector<2> rise_time = (time_cp_90 - time_cp_10) / 1e6f;
-//	math::Vector<2> rise_time1 = (time_cp1_90 - time_cp1_10) / 1e6f;
-//	printf("omega start: %.10f, %.10f\n", (double) start[0], (double) start[1]);
-//	printf("omega: %.10f, %.10f\n", (double) omega_cp[0], (double) omega_cp[1]);
-//	printf("filtered rise time: %.10f, %.10f\n", (double) rise_time(0), (double) rise_time(1));
-//	printf("omega: %.10f, %.10f\n", (double) omega_cp1[0], (double) omega_cp1[1]);
-//	printf("raw rise time: %.10f, %.10f\n", (double) rise_time1(0), (double) rise_time1(1));
-//
-//	rise_time(0) = 0.02;
-//	math::Vector<2> xi_recip = rise_time * _mixer_info.k_p;
-//	math::Vector<2> des_ki = xi_recip * 8100.f;
-//	math::Vector<2> des_kp = xi_recip * 1.4f * 90.f;
-//
-//	printf("Xi: %,3f, %.3f\n", (double) (1 / xi_recip(0)), (double) (1 / xi_recip(1)));
-//	printf("Desired Ki %.6f, %.6f\n", (double) des_ki(0), (double) des_ki(1));
-//	printf("Desired kp %.6f, %.6f\n", (double) des_kp(0), (double) des_kp(1));
-//
-//
-//
-//
-//	usleep(4000000);
-//
-//	aa.armed = false;
-//	aa.prearmed = true;
-//	aa.ready_to_arm = true;
-//	aa.lockdown = false;
-//	aa.manual_lockdown = false;
-//	aa.force_failsafe = false;
-//	aa.in_esc_calibration_mode = false;
-//
-//	handle = orb_advertise(ORB_ID(actuator_armed), &aa);
-//	if (handle == nullptr) {
-//		errx(1, "advertise failed 2");
-//	}
-//
-//	orb_unadvertise(handle);
-
 }
 
 void
@@ -2998,7 +3065,12 @@ tsfmu_main(int argc, char *argv[])
 	}
 
 	if (!strcmp(verb, "calibrate")){
-		if(g_fmu != NULL) g_fmu->calibrate(argc -1, argv + 1);
+		if (argc < 3){
+			warnx("usage - tsfmu calibrate fit/pid");
+			exit(0);
+		}
+
+		if(g_fmu != NULL) g_fmu->calibrate(argv[2]);
 		exit(0);
 	}
 
