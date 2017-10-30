@@ -428,17 +428,17 @@ TSFMU::TSFMU() :
 	_mixer_info.deg_max = 50.f;
 	_mixer_info.deg_min = -50.f;
 	_mixer_info.k_c[0] = -1.136835f;
-	_mixer_info.k_c[1] = -1.240911466216619;
+	_mixer_info.k_c[1] = -1.2131686211;
 	_mixer_info.k_w2[0] = -0.000000030499f;//1.f;
-	_mixer_info.k_w2[1] = -0.000000019738231f;
+	_mixer_info.k_w2[1] = -0.0000000134f;
 	_mixer_info.k_w[0] = 0.001752517190f;//1.f;
-	_mixer_info.k_w[1] = 0.001705341665494f;
-	_mixer_info.k_p = 0.005f;//0.002f;
-	_mixer_info.k_i = 0;//0.1647;//0.0262f;
-	_mixer_info.int_term_lim = 50000.f;
-	_mixer_info.p_term_lim = 1000.f;
+	_mixer_info.k_w[1] = 0.0016704800f;
+	_mixer_info.k_p = 0.006024f;//0.002f;
+	_mixer_info.k_i = 0.387261f;//0.1647;//0.0262f;
+	_mixer_info.int_term_lim = 6.f;
+	_mixer_info.p_term_lim = 0.2f;
 	_mixer_info.control_interval = SCHEDULE_INTERVAL;
-	_mixer_info.integral_lim = 10000.f;
+	_mixer_info.integral_lim = 5.f;
 	_mixer_info.calib_volt = 12.5f;
 
 
@@ -1158,7 +1158,7 @@ TSFMU::calc_pid_param(){
 
 
 	ts_actuator_controls_s ac;
-
+	ac.timestamp = hrt_absolute_time();
 	ac.control[0] = 0.f;
 
 	ac.control[1] = 0.f;
@@ -1175,10 +1175,10 @@ TSFMU::calc_pid_param(){
 	printf("published first cmd\n");
 	usleep(8000000);
 
+	ac.timestamp = hrt_absolute_time();
+	ac.control[0] = 700.f;
 
-	ac.control[0] = 300.f;
-
-	ac.control[1] = 300.f;
+	ac.control[1] = 700.f;
 
 	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
 
@@ -1218,7 +1218,7 @@ TSFMU::calc_pid_param(){
 	float start[2]= {esc_rads_msg.rads_filtered[0], esc_rads_msg.rads_filtered[1]};
 	int hit_check_point[2] = {2,0};
 	int hit_check_point1[2] = {2,0};
-	float jump_step = 200.f;
+	float jump_step = 100.f;
 	float check_point_10[2] = {start[0],
 			                   start[1]};
 	float check_point_90[2] = {start[0] + jump_step * 0.63f,
@@ -1238,6 +1238,7 @@ TSFMU::calc_pid_param(){
 	math::Vector<2> time_cp1_10(0,0);
 	math::Vector<2> time_cp1_90(0,0);
 
+	ac.timestamp = hrt_absolute_time();
 	ac.control[0] = start[0] + jump_step;
 	ac.control[1] = start[1] + jump_step;
 
@@ -2968,6 +2969,7 @@ fake(int argc, char *argv[])
 
 	ts_actuator_controls_s ac;
 
+	ac.timestamp = hrt_absolute_time();
 	ac.control[0] = strtof(argv[1], 0);
 
 	ac.control[1] = strtof(argv[2], 0);
