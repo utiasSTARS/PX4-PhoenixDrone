@@ -65,7 +65,7 @@
 
 #define PWM_SERVO_MIN 900
 #define PWM_SERVO_MAX 2100
-#define SCHEDULE_INTERVAL	2000	/**< The schedule interval in usec (500 Hz) */
+#define SCHEDULE_INTERVAL	500	/**< The schedule interval in usec (500 Hz) */
 #define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 #define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)
 #define CYCLE_COUNT 10			/* safety switch must be held for 1 second to activate */
@@ -73,9 +73,9 @@
 #define RPM_CH_RIGHT 3
 #define NUM_POLES 7
 #define NUM_SYNC_PER_CYCLE 3
-#define TIMER_PSC 8
+#define TIMER_PSC 2
 #define PI 3.14159f
-#define RADS_FILTER_CONSTANT 0.8f
+#define RADS_FILTER_CONSTANT 0.99f
 #define TIMEOUT_MS 200
 #define CH_TIMEOUT_MS 100
 #define MED_FIL_ENTRY 5
@@ -230,12 +230,14 @@ private:
 	float	_esc_rads_calib[2][10];
 	int 	_esc_rads_curr_indx_calib;
 	float   _esc_rads_avg_calib[2];
+	hrt_abstime _esc_rads_delay;
 	sem_t 	_sem_timer_calib;
 	struct work_s	_work_calib;
 
 
 	perf_counter_t	_ctl_latency;
 	perf_counter_t  _capture_cb;
+	perf_counter_t  _esc_rads_main;
 
 	/*Debug Only, to be deleted */
 	volatile uint64_t ridi_timediffs[5];
@@ -383,10 +385,12 @@ TSFMU::TSFMU() :
 	_esc_rads_calib{0},
 	_esc_rads_curr_indx_calib(0),
 	_esc_rads_avg_calib{0},
+	_esc_rads_delay{0},
 	_sem_timer_calib{0},
 	_work_calib{},
-	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat")),
-	_capture_cb(perf_alloc(PC_ELAPSED, "capture callback")),
+	_ctl_latency(perf_alloc(PC_INTERVAL, "ctl_lat")),
+	_capture_cb(perf_alloc(PC_INTERVAL, "capture callback")),
+	_esc_rads_main(perf_alloc(PC_ELAPSED, "esc_rads_meas")),
 	ridi_timediffs{0},
 	ridi_idx(0)
 {
@@ -428,17 +432,17 @@ TSFMU::TSFMU() :
 	_mixer_info.deg_max = 50.f;
 	_mixer_info.deg_min = -50.f;
 	_mixer_info.k_c[0] = -1.136835f;
-	_mixer_info.k_c[1] = -1.2131686211;
+	_mixer_info.k_c[1] = -1.199427f;
 	_mixer_info.k_w2[0] = -0.000000030499f;//1.f;
-	_mixer_info.k_w2[1] = -0.0000000134f;
+	_mixer_info.k_w2[1] = -0.0000000332f;
 	_mixer_info.k_w[0] = 0.001752517190f;//1.f;
-	_mixer_info.k_w[1] = 0.0016704800f;
-	_mixer_info.k_p = 0.006024f;//0.002f;
-	_mixer_info.k_i = 0.387261f;//0.1647;//0.0262f;
-	_mixer_info.int_term_lim = 6.f;
-	_mixer_info.p_term_lim = 0.2f;
+	_mixer_info.k_w[1] = 0.0016375342f;
+	_mixer_info.k_p = 0.0012856f;
+	_mixer_info.k_i = 0.827042;
+	_mixer_info.int_term_lim = 4.f;
+	_mixer_info.p_term_lim = 0.4f;
 	_mixer_info.control_interval = SCHEDULE_INTERVAL;
-	_mixer_info.integral_lim = 5.f;
+	_mixer_info.integral_lim = 5000.f;
 	_mixer_info.calib_volt = 12.5f;
 
 
@@ -515,6 +519,7 @@ TSFMU::~TSFMU()
 
 	perf_free(_ctl_latency);
 	perf_free(_capture_cb);
+	perf_free(_esc_rads_main);
 
 	g_fmu = nullptr;
 }
@@ -831,7 +836,9 @@ TSFMU::rads_task_main()
 {
 	struct timespec time;
 	struct esc_rads_s esc_rads_msg;
+	hrt_abstime last_time = 0;
 	while(!_rads_task_should_exit) {
+
 		(void) clock_gettime (CLOCK_REALTIME, &time);
 		time.tv_nsec += TIMEOUT_MS * 1000 * 1000;
 		if (time.tv_nsec >= 1000 * 1000 * 1000)
@@ -839,8 +846,11 @@ TSFMU::rads_task_main()
 			time.tv_sec++;
 			time.tv_nsec -= 1000 * 1000 * 1000;
 		}
+		perf_begin(_esc_rads_main);
 		int ret = sem_timedwait (&_sem_timer, &time);
+		perf_end(_esc_rads_main);
 		hrt_abstime now = hrt_absolute_time();
+
 		if (ret == 0)
 		{
 			/*Check if any timeDiff is invalid */
@@ -866,7 +876,9 @@ TSFMU::rads_task_main()
 			reset_rads_meas(RPM_CH_LEFT);
 			reset_rads_meas(RPM_CH_RIGHT);
 		}
-		esc_rads_msg.timestamp = now;
+		esc_rads_msg.timestamp = hrt_absolute_time();
+		_esc_rads_delay = hrt_elapsed_time(&last_time);
+		last_time = esc_rads_msg.timestamp;
 		esc_rads_msg.rads_filtered[0] = _rads_l;
 		esc_rads_msg.rads_raw[0] = _rads_l_raw;
 		esc_rads_msg.rads_filtered[1] = _rads_r;
@@ -875,6 +887,7 @@ TSFMU::rads_task_main()
 		esc_rads_msg.rads_raw[2] = 0;
 		esc_rads_msg.rads_filtered[3] = 0;
 		esc_rads_msg.rads_raw[3] = 0;
+		//memcpy(&_esc_rads_msg, &esc_rads_msg, sizeof(esc_rads_msg));
 
 		if(esc_rads_msg.rads_raw[0] < 0 || esc_rads_msg.rads_raw[0] > 10000.f){
 			esc_rads_msg.rads_raw[0] = 0;
@@ -887,10 +900,10 @@ TSFMU::rads_task_main()
 		if (_rads_pub != nullptr) {
 			orb_publish(ORB_ID(esc_rads), _rads_pub, &esc_rads_msg);
 
-
 		} else {
 			_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
 		}
+
 	}
 
 	_rads_task = -1;
@@ -909,7 +922,8 @@ void
 TSFMU::capture_callback(uint32_t chan_index,
 			 hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
-	perf_begin(_capture_cb);
+	//perf_begin(_capture_cb);
+	perf_count(_capture_cb);
 	//fprintf(stdout, "FMU: Capture chan:%d time:%lld state:%d overflow:%d\n", chan_index, edge_time, edge_state, overflow);
 	bool valid = true;
 	//tested: overflow does not occur as long as there is no printf in the callback which takes 3500-4000us each printf
@@ -972,7 +986,7 @@ TSFMU::capture_callback(uint32_t chan_index,
 	int svalue;
 	sem_getvalue (&_sem_timer, &svalue);
 	if (valid && svalue < 0) sem_post(&_sem_timer);
-	perf_end(_capture_cb);
+	//perf_end(_capture_cb);
 }
 
 
@@ -1376,7 +1390,8 @@ TSFMU::update_pwm_out_state(bool on)
 
 void
 TSFMU::cycle()
-{
+{perf_count(_ctl_latency);
+
 	if (!_initialized) {
 		/* force a reset of the update rate */
 		_current_update_rate = 0;
@@ -1444,7 +1459,8 @@ TSFMU::cycle()
 //			warnx("no PWM: failsafe");
 
 	} else {
-		perf_begin(_ctl_latency);
+		//perf_begin(_ctl_latency);
+
 
 		/* get controls for required topics */
 		unsigned poll_id = 0;
@@ -1523,7 +1539,7 @@ TSFMU::cycle()
 			fds[0].fd = _esc_rads_sub;
 			fds[0].events = POLLIN;
 
-			int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
+			int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.0);
 
 			/* timed out */
 			if (pret == 0) {
@@ -1540,15 +1556,18 @@ TSFMU::cycle()
 
 			/* read esc_rads and setup pi controller*/
 			if (pret > 0 && (fds[0].revents & POLLIN)) {
+
 				orb_copy(ORB_ID(esc_rads), _esc_rads_sub, &esc_rads_msg);
 
 				sem_wait(&_sem_timer_calib);
 				_esc_rads_msg = esc_rads_msg;
 				sem_post(&_sem_timer_calib);
 
+
 				float esc_rads_meas[2] = {_esc_rads_msg.rads_filtered[0],
 										   _esc_rads_msg.rads_filtered[1]};
 				_ts_mixer->set_curr_omega(esc_rads_meas);
+				//_esc_rads_delay = hrt_elapsed_time(&_esc_rads_msg.timestamp);
 
 				/*book keep rads to get moving avg*/
 				if(_is_calib){
@@ -1578,6 +1597,7 @@ TSFMU::cycle()
 				_ts_mixer->set_curr_omega_valid(meas_valid);
 				// TODO: get voltage from topics
 				//_ts_mixer->update_mixer_info(12.5f);
+
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
 			}
@@ -1643,7 +1663,7 @@ TSFMU::cycle()
 			}
 
 			publish_pwm_outputs(pwm_limited, num_outputs);
-			perf_end(_ctl_latency);
+			//perf_end(_ctl_latency);
 		}
 	}
 //	} // poll_fds
@@ -2680,6 +2700,8 @@ TSFMU::print_info()
 
 	for (unsigned i = 0; i < 5; i++) printf("%llu\t", ridi_timediffs[i]);
 	printf("\n");
+
+	printf("esc_rads_delay: %.3f ms\n", (double) (_esc_rads_delay / 1000.f));
 }
 
 namespace
