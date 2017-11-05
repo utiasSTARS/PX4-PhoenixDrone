@@ -33,6 +33,7 @@
 
 #define NAN_VALUE	(0.0f/0.0f)
 #define TIMEOUT_MS 	10
+#define TRACK_PI	false
 
 namespace
 {
@@ -56,13 +57,14 @@ TailsitterMixer::TailsitterMixer(ControlCallback control_cb,
 				Mixer(control_cb, cb_handle),
 				_mixer_info(*mixer_info),
 				_prev_mixer_info{0},
-				_delta_out_max(0),
+				_delta_out_max(0.5),
 				_rotor_controller_init(false),
 				_last_control_timestamp(0),
 				_pi_integrals(0,0),
 				_curr_omegas(0,0),
 				_curr_omegas_valid(false),
-				_sem_mixer{0}
+				_sem_mixer{0},
+				_prev_outputs{0}
 
 {
 }
@@ -116,7 +118,7 @@ TailsitterMixer::from_text(Mixer::ControlCallback control_cb,
 void
 TailsitterMixer::set_max_delta_out_once(float delta_out_max)
 {
-	_delta_out_max = delta_out_max;
+	_delta_out_max = 0.5;//delta_out_max;
 }
 
 void
@@ -154,20 +156,6 @@ TailsitterMixer::update_mixer_info(mixer_ts_s *mixer_info)
 			_report_mixer_info();
 		}
 		sem_post(&_sem_mixer);
-	}
-
-}
-
-void
-TailsitterMixer::update_mixer_info(float volt){
-	float volt_scale = volt / _mixer_info.calib_volt;
-	_mixer_info.k_p /= volt_scale;
-	_mixer_info.k_i /= volt_scale;
-	for(int i=0; i<2; i++){
-		_mixer_info.k_w2[i] /= volt_scale;
-		_mixer_info.k_w[i]  /= volt_scale;
-		_mixer_info.k_c[i]   = _mixer_info.k_c[i] / volt_scale +
-							   (1 - volt_scale) / volt_scale / 500.0f * 1500.f;
 	}
 
 }
@@ -244,8 +232,8 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	}
 
 	//printf("%.2f, %.2f\n", (double) mot_left, (double) mot_right);
-	outputs[0] = constrain(mot_left, -1.f, 1.f);
-	outputs[1] = constrain(mot_right, -1.f, 1.f);
+	outputs[0] = mot_left;
+	outputs[1] = mot_right;
 
 	outputs[2] = 0;//Not being used, will be set to NaN in tsfmu cycle
 	outputs[3] = 0;
@@ -254,6 +242,8 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	outputs[4] = normalize(elv_left , _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
 	outputs[5] = normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
 
+	_prev_outputs[0] = outputs[0];
+	_prev_outputs[1] = outputs[1];
 
 	return 6;
 }
@@ -282,6 +272,7 @@ TailsitterMixer::set_curr_omega_valid(bool valid){
 void
 TailsitterMixer::_rotor_control(float dt, float* omega_desired, float** pwm_outputs)
 {
+	//printf("control time: %.5f\n", (double) dt);
 	/* control pwm to track desired rotor angular velocity*/
 	math::Vector<2> k_w2;
 	math::Vector<2> k_w;
@@ -309,10 +300,10 @@ TailsitterMixer::_rotor_control(float dt, float* omega_desired, float** pwm_outp
 							  	  	_curr_omegas.emult(k_w) +
 								  	  	  	  	 	   k_c;
 
-	pwm_ff = (desired.emult(desired)).emult(k_w2) +
-							  desired.emult(k_w) +
-										  	k_c;
-	pwm_ff = pwm_ff / 12.5f * 12.2f;
+//	pwm_ff = (desired.emult(desired)).emult(k_w2) +
+//							  desired.emult(k_w) +
+//										  	k_c;
+
 
 	math::Vector<2> error = desired - _curr_omegas;
 	_pi_integrals = _pi_integrals + error * dt;
@@ -320,39 +311,43 @@ TailsitterMixer::_rotor_control(float dt, float* omega_desired, float** pwm_outp
 	for(int i=0; i<2; i++){
 		math::Vector<2> prev_pi_integrals = _pi_integrals;
 		_pi_integrals(i) = math::constrain(_pi_integrals(i), -_mixer_info.integral_lim, _mixer_info.integral_lim);
-		if (i == 1 && prev_pi_integrals(i) > _pi_integrals(i))
-			printf("Motor %d Integral %.2f hits upper bound\n", i , (double) prev_pi_integrals(i));
-		else if (i == 1 && _pi_integrals(i) > prev_pi_integrals(i))
-			printf("Motor %d Integral %.2f hits lower bound\n", i , (double) prev_pi_integrals(i));
+		if (_mixer_info.k_i > 0 && TRACK_PI){
+			if (i == 0 && prev_pi_integrals(i) > _pi_integrals(i))
+				printf("Motor %d Integral %.2f hits upper bound\n", i , (double) prev_pi_integrals(i));
+			else if (i == 0 && _pi_integrals(i) > prev_pi_integrals(i))
+				printf("Motor %d Integral %.2f hits lower bound\n", i , (double) prev_pi_integrals(i));
+		}
+
 	}
 
 	pwm_p = error * _mixer_info.k_p;
-	//printf("%.2f, %.2f\n", (double) error(0), (double) _curr_omegas(0));
 	pwm_i = _pi_integrals *_mixer_info.k_i;
 
 	for(int i=0; i<2; i++){
 		pwm_p_cons(i) = math::constrain(pwm_p(i), -_mixer_info.p_term_lim, _mixer_info.p_term_lim);
 		pwm_i_cons(i) = math::constrain(pwm_i(i), -_mixer_info.int_term_lim, _mixer_info.int_term_lim);
-		if(i == 1 && pwm_p_cons(i) < pwm_p(i))
-			printf("Motor %d P term %.2f hits upper bound\n", i, (double) pwm_p(i));
-		else if(i == 1 && pwm_p_cons(i) > pwm_p(i))
-			printf("Motor %d P term %.2f hits lower bound\n", i, (double) pwm_p(i));
-		if (i == 1 && pwm_i_cons(i) < pwm_i(i))
-			printf("Motor %d I term %.2f hits upper bound\n", i, (double) pwm_i(i));
-		else if (i == 1 && pwm_i_cons(i) > pwm_i(i))
-			printf("Motor %d I term %.2f hits lower bound\n", i, (double) pwm_i(i));
+		if (TRACK_PI){
+			if(i == 0 && pwm_p_cons(i) < pwm_p(i))
+				printf("Motor %d P term %.2f hits upper bound\n", i, (double) pwm_p(i));
+			else if(i == 0 && pwm_p_cons(i) > pwm_p(i))
+				printf("Motor %d P term %.2f hits lower bound\n", i, (double) pwm_p(i));
+			if (i == 0 && pwm_i_cons(i) < pwm_i(i))
+				printf("Motor %d I term %.2f hits upper bound\n", i, (double) pwm_i(i));
+			else if (i == 0 && pwm_i_cons(i) > pwm_i(i))
+				printf("Motor %d I term %.2f hits lower bound\n", i, (double) pwm_i(i));
+		}
+
 
 	}
 
 
+	math::Vector<2> outputs = pwm_ff + pwm_p_cons + pwm_i_cons;
 
-	math::Vector<2> outputs = pwm_ff; //+ pwm_p_cons + pwm_i_cons;
 	*pwm_outputs[0] = outputs(0);
 	*pwm_outputs[1] = outputs(1);
 
 	sem_post(&_sem_mixer);
 
-	//printf("%.2f,%.2f,%.2f,%.2f\n", (double) outputs(0), (double) error(0),(double) _curr_omegas(0),(double) _curr_omegas(1));
 }
 
 

@@ -65,7 +65,7 @@
 
 #define PWM_SERVO_MIN 900
 #define PWM_SERVO_MAX 2100
-#define SCHEDULE_INTERVAL	500	/**< The schedule interval in usec (500 Hz) */
+#define SCHEDULE_INTERVAL	2000	/**< The schedule interval in usec (500 Hz) */
 #define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 #define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)
 #define CYCLE_COUNT 10			/* safety switch must be held for 1 second to activate */
@@ -75,7 +75,7 @@
 #define NUM_SYNC_PER_CYCLE 3
 #define TIMER_PSC 2
 #define PI 3.14159f
-#define RADS_FILTER_CONSTANT 0.99f
+#define RADS_FILTER_CONSTANT 0.6f
 #define TIMEOUT_MS 200
 #define CH_TIMEOUT_MS 100
 #define MED_FIL_ENTRY 5
@@ -135,7 +135,7 @@ private:
 
 	hrt_abstime _cycle_timestamp = 0;
 	hrt_abstime _last_safety_check = 0;
-	hrt_abstime _time_last_mix = 0;
+	//hrt_abstime _time_last_mix = 0;
 
 	static const unsigned _max_actuators = 6; //DIRECT_PWM_OUTPUT_CHANNELS; //defined in board_config.h
 	static const unsigned _max_timers = 4;
@@ -236,6 +236,7 @@ private:
 
 
 	perf_counter_t	_ctl_latency;
+	perf_counter_t  _cycle_exec;
 	perf_counter_t  _capture_cb;
 	perf_counter_t  _esc_rads_main;
 
@@ -388,7 +389,8 @@ TSFMU::TSFMU() :
 	_esc_rads_delay{0},
 	_sem_timer_calib{0},
 	_work_calib{},
-	_ctl_latency(perf_alloc(PC_INTERVAL, "ctl_lat")),
+	_ctl_latency(perf_alloc(PC_ELAPSED, "ctl_lat")),
+	_cycle_exec(perf_alloc(PC_INTERVAL, "cyc_exe")),
 	_capture_cb(perf_alloc(PC_INTERVAL, "capture callback")),
 	_esc_rads_main(perf_alloc(PC_ELAPSED, "esc_rads_meas")),
 	ridi_timediffs{0},
@@ -431,19 +433,19 @@ TSFMU::TSFMU() :
 	_mixer_info.rads_max = 1000.f;
 	_mixer_info.deg_max = 50.f;
 	_mixer_info.deg_min = -50.f;
-	_mixer_info.k_c[0] = -1.136835f;
-	_mixer_info.k_c[1] = -1.199427f;
-	_mixer_info.k_w2[0] = -0.000000030499f;//1.f;
-	_mixer_info.k_w2[1] = -0.0000000332f;
-	_mixer_info.k_w[0] = 0.001752517190f;//1.f;
-	_mixer_info.k_w[1] = 0.0016375342f;
-	_mixer_info.k_p = 0.0012856f;
-	_mixer_info.k_i = 0.827042;
-	_mixer_info.int_term_lim = 4.f;
-	_mixer_info.p_term_lim = 0.4f;
+	_mixer_info.k_c[0] = 5.0532088280f;
+	_mixer_info.k_c[1] = 5.2219347954f;
+	_mixer_info.k_w2[0] = 0.0000024338f;//1.f;
+	_mixer_info.k_w2[1] = 0.0000027612f;
+	_mixer_info.k_w[0] = 0.0055421125f;//1.f;
+	_mixer_info.k_w[1] = 0.0052889767f;
+	_mixer_info.k_p = 0.02f;//0.005818f;
+	_mixer_info.k_i = 0.037584f;//0.333088f;
+	_mixer_info.int_term_lim = 1.5f;
+	_mixer_info.p_term_lim = 4.f;
 	_mixer_info.control_interval = SCHEDULE_INTERVAL;
-	_mixer_info.integral_lim = 5000.f;
-	_mixer_info.calib_volt = 12.5f;
+	_mixer_info.integral_lim = 50.f;
+	_mixer_info.calib_volt = 12.52f;
 
 
 	_ts_mixer = new TailsitterMixer(ts_control_callback, (uintptr_t)_ts_controls, &_mixer_info);
@@ -518,6 +520,7 @@ TSFMU::~TSFMU()
 
 
 	perf_free(_ctl_latency);
+	perf_free(_cycle_exec);
 	perf_free(_capture_cb);
 	perf_free(_esc_rads_main);
 
@@ -1102,20 +1105,6 @@ TSFMU::fit_curve(){
 		}
 	}
 
-//  linear regression test
-//	for(int j=0; j<CALIB_NUM_INTVL; j++){
-//		A_l[j][0] = j*j;
-//		A_l[j][1] = j;
-//		A_l[j][2] = 1;
-//		y_l[j] = j*j + 2 * j + 3;
-//		A_r[j][0] = j*j;
-//		A_r[j][1] = j;
-//		A_r[j][2] = 1;
-//		y_r[j] = 1.5 * j*j + 3.43 * j + 5.24;
-//	}
-
-
-
 	math::Matrix<CALIB_NUM_INTVL, 3> A(A_l);
 	math::Matrix<3, CALIB_NUM_INTVL> AT = A.transposed();
 	math::Vector<CALIB_NUM_INTVL> y(y_l);
@@ -1128,10 +1117,21 @@ TSFMU::fit_curve(){
 	ATA_inv = (AT * A).inversed();
 	math::Vector<3> coeff_r = (ATA_inv * AT) * y;
 
+	float voltage = _curr_batt_volt;
+	// map from (-1, 1) to voltage
+	coeff_l = coeff_l * 500;
+	coeff_l(2) += 1500;
+	coeff_l = coeff_l * (voltage / (1000000.f / _pwm_alt_rate));
+
+	coeff_r = coeff_r * 500;
+	coeff_r(2) += 1500;
+	coeff_r = coeff_r * (voltage / (1000000.f / _pwm_alt_rate));
+
+	printf("curr voltage: %.5f",(double) voltage);
 	printf("pwm-omega fit results,\n L: %.10f, %.10f, %.10f\n R: %.10f, %.10f, %.10f\n",
 			(double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
 			(double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
-	printf("curr voltage: %.5f",(double) _curr_batt_volt);
+
 
 	pwm_outputs[0] = -1;
 
@@ -1190,9 +1190,9 @@ TSFMU::calc_pid_param(){
 	usleep(8000000);
 
 	ac.timestamp = hrt_absolute_time();
-	ac.control[0] = 700.f;
+	ac.control[0] = 500.f;
 
-	ac.control[1] = 700.f;
+	ac.control[1] = 500.f;
 
 	handle = orb_advertise(ORB_ID(ts_actuator_controls_0), &ac);
 
@@ -1230,8 +1230,9 @@ TSFMU::calc_pid_param(){
 
 
 	float start[2]= {esc_rads_msg.rads_filtered[0], esc_rads_msg.rads_filtered[1]};
-	int hit_check_point[2] = {2,0};
-	int hit_check_point1[2] = {2,0};
+	printf("omega start: %.10f, %.10f\n", (double) start[0], (double) start[1]);
+	int hit_check_point[2] = {0,2};
+	int hit_check_point1[2] = {0,2};
 	float jump_step = 100.f;
 	float check_point_10[2] = {start[0],
 			                   start[1]};
@@ -1265,7 +1266,7 @@ TSFMU::calc_pid_param(){
 
 	int count = 0;
 
-	while(hit_check_point[1] != 2 || hit_check_point1[1] != 2){
+	while(hit_check_point[0] != 2 || hit_check_point1[0] != 2 || hit_check_point[1] != 2 || hit_check_point1[1] != 2){
 		pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.1);
 
 		/* timed out */
@@ -1284,7 +1285,7 @@ TSFMU::calc_pid_param(){
 			orb_copy(ORB_ID(esc_rads), esc_rads_sub, &esc_rads_msg);
 		}
 
-		for(int i = 1; i<2; i++){
+		for(int i = 0; i<2; i++){
 			if(esc_rads_msg.rads_filtered[i] >= check_point_10[i] && hit_check_point[i] == 0){
 				time_cp_10(i) = (float) hrt_absolute_time();
 				hit_check_point[i]++;
@@ -1314,13 +1315,11 @@ TSFMU::calc_pid_param(){
 
 	math::Vector<2> rise_time = (time_cp_90 - time_cp_10) / 1e6f;
 	math::Vector<2> rise_time1 = (time_cp1_90 - time_cp1_10) / 1e6f;
-	printf("omega start: %.10f, %.10f\n", (double) start[0], (double) start[1]);
 	printf("omega: %.10f, %.10f\n", (double) omega_cp[0], (double) omega_cp[1]);
 	printf("filtered rise time: %.10f, %.10f\n", (double) rise_time(0), (double) rise_time(1));
 	printf("omega: %.10f, %.10f\n", (double) omega_cp1[0], (double) omega_cp1[1]);
 	printf("raw rise time: %.10f, %.10f\n", (double) rise_time1(0), (double) rise_time1(1));
 
-	rise_time(0) = 0.02;
 	math::Vector<2> xi_recip = rise_time * _mixer_info.k_p;
 	math::Vector<2> des_ki = xi_recip * 8100.f;
 	math::Vector<2> des_kp = xi_recip * 1.4f * 90.f;
@@ -1328,7 +1327,7 @@ TSFMU::calc_pid_param(){
 	printf("Xi: %,3f, %.3f\n", (double) (1 / xi_recip(0)), (double) (1 / xi_recip(1)));
 	printf("Desired Ki %.6f, %.6f\n", (double) des_ki(0), (double) des_ki(1));
 	printf("Desired kp %.6f, %.6f\n", (double) des_kp(0), (double) des_kp(1));
-
+	printf("current voltage %.6f\n", (double)( _curr_batt_volt / 1000.0f));
 	usleep(2000000);
 
 	aa.armed = false;
@@ -1390,7 +1389,8 @@ TSFMU::update_pwm_out_state(bool on)
 
 void
 TSFMU::cycle()
-{perf_count(_ctl_latency);
+{perf_count(_cycle_exec);
+ perf_begin(_ctl_latency);
 
 	if (!_initialized) {
 		/* force a reset of the update rate */
@@ -1510,23 +1510,23 @@ TSFMU::cycle()
 
 			size_t num_outputs = 6;
 
-			hrt_abstime now = hrt_absolute_time();
-			float dt = (now - _time_last_mix) / 1e6f;
-			_time_last_mix = now;
+//			hrt_abstime now = hrt_absolute_time();
+//			float dt = (now - _time_last_mix) / 1e6f;
+//			_time_last_mix = now;
 
-			if (dt < 0.0001f) {
-				dt = 0.0001f;
-
-			} else if (dt > 0.02f) {
-				dt = 0.02f;
-			}
-
-			if (_mot_t_max > FLT_EPSILON) {
-				// maximum value the ouputs of the multirotor mixer are allowed to change in this cycle
-				// factor 2 is needed because actuator ouputs are in the range [-1,1]
-				float delta_out_max = 2.0f * 1000.0f * dt / (_max_pwm[0] - _min_pwm[0]) / _mot_t_max;
-				_ts_mixer->set_max_delta_out_once(delta_out_max);
-			}
+//			if (dt < 0.0001f) {
+//				dt = 0.0001f;
+//
+//			} else if (dt > 0.02f) {
+//				dt = 0.02f;
+//			}
+//
+//			if (_mot_t_max > FLT_EPSILON) {
+//				// maximum value the ouputs of the multirotor mixer are allowed to change in this cycle
+//				// factor 2 is needed because actuator ouputs are in the range [-1,1]
+//				float delta_out_max = 2.0f * 1000.0f * dt / (_max_pwm[0] - _min_pwm[0]) / _mot_t_max;
+//				_ts_mixer->set_max_delta_out_once(delta_out_max);
+//			}
 
 			/* do mixing */
 			float outputs[_max_actuators] = {0};
@@ -1539,7 +1539,7 @@ TSFMU::cycle()
 			fds[0].fd = _esc_rads_sub;
 			fds[0].events = POLLIN;
 
-			int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0.0);
+			int pret = px4_poll(&fds[0], (sizeof(fds) / sizeof(fds[0])), 0);
 
 			/* timed out */
 			if (pret == 0) {
@@ -1567,7 +1567,6 @@ TSFMU::cycle()
 				float esc_rads_meas[2] = {_esc_rads_msg.rads_filtered[0],
 										   _esc_rads_msg.rads_filtered[1]};
 				_ts_mixer->set_curr_omega(esc_rads_meas);
-				//_esc_rads_delay = hrt_elapsed_time(&_esc_rads_msg.timestamp);
 
 				/*book keep rads to get moving avg*/
 				if(_is_calib){
@@ -1592,13 +1591,20 @@ TSFMU::cycle()
 					_got_first_cmd = true;
 					_ts_mixer->clear_integral(0);
 					_ts_mixer->clear_integral(1);
-//					printf("integrals cleared");
 				}
 				_ts_mixer->set_curr_omega_valid(meas_valid);
-				// TODO: get voltage from topics
-				//_ts_mixer->update_mixer_info(12.5f);
 
+				// outputs are voltage
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
+
+				// change output to pwm scaled to (-1, 1)
+				for(unsigned int i=0; i<2; i++){
+					outputs[i] = (outputs[i] / _curr_batt_volt) * (1000000.f / _pwm_alt_rate);
+					outputs[i] = (outputs[i] - 1500.f) / 500.f;
+					outputs[i] = math::constrain(outputs[i], -1.f, 1.f);
+				}
+
+				memcpy(_outputs, outputs, sizeof(outputs));
 
 			}
 			else{
@@ -1619,12 +1625,6 @@ TSFMU::cycle()
 
 			/* override outputs with cmd line input if calibrating*/
 			if (_is_calib){
-//				int sem_value;
-//				sem_getvalue(&_sem_timer_calib, &sem_value);
-//				if (sem_value == 0){
-//					sem_wait(&_sem_timer_calib);
-//					sem_post(&_sem_timer_calib);
-//				}
 				sem_wait(&_sem_timer_calib);
 				memcpy(outputs, _outputs_calib, sizeof(_outputs_calib));
 				sem_post(&_sem_timer_calib);
@@ -1663,10 +1663,9 @@ TSFMU::cycle()
 			}
 
 			publish_pwm_outputs(pwm_limited, num_outputs);
-			//perf_end(_ctl_latency);
+
 		}
 	}
-//	} // poll_fds
 
 	_cycle_timestamp = hrt_absolute_time();
 
@@ -1738,8 +1737,8 @@ TSFMU::cycle()
 
 	orb_check(_batt_status_sub, &updated);
 	if (updated) {
-		orb_copy(ORB_ID(actuator_armed), _batt_status_sub, &_batt_status_msg);
-		_curr_batt_volt = _batt_status_msg.voltage_v;
+		orb_copy(ORB_ID(battery_status), _batt_status_sub, &_batt_status_msg);
+		memcpy(&_curr_batt_volt, &_batt_status_msg.voltage_filtered_v, sizeof(_batt_status_msg.voltage_filtered_v));
 	}
 
 
@@ -1788,13 +1787,13 @@ TSFMU::cycle()
 		}
 
 	}
-
+	perf_end(_ctl_latency);
 
 
 	/*
 	 * schedule next cycle
 	 */
-	work_queue(HPWORK, &_work, (worker_t)&TSFMU::cycle_trampoline, this, USEC2TICK(SCHEDULE_INTERVAL));
+	work_queue(HPWORK, &_work, (worker_t)&TSFMU::cycle_trampoline, this, USEC2TICK(500));
 //		   USEC2TICK(SCHEDULE_INTERVAL - main_out_latency));
 }
 

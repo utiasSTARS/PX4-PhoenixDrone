@@ -791,7 +791,6 @@ public:
 	void	init_rotor_controller();
 	void	set_curr_omega_valid(bool valid);
 	void	update_mixer_info(mixer_ts_s *mixer_info);
-	void	update_mixer_info(float volt);
 	void    clear_integral(int motor_index);
 
 
@@ -812,6 +811,7 @@ private:
 	math::Vector<2>			_curr_omegas;
 	bool					_curr_omegas_valid;
 	sem_t					_sem_mixer;
+	float					_prev_outputs[2];
 
 	void 					_rotor_control(float dt, float* omega_desired, float** pwm_outputs);
 	void					_report_mixer_info(void);
