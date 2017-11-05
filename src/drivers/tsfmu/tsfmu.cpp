@@ -439,8 +439,8 @@ TSFMU::TSFMU() :
 	_mixer_info.k_w2[1] = 0.0000027612f;
 	_mixer_info.k_w[0] = 0.0055421125f;//1.f;
 	_mixer_info.k_w[1] = 0.0052889767f;
-	_mixer_info.k_p = 0.02f;//0.005818f;
-	_mixer_info.k_i = 0.037584f;//0.333088f;
+	_mixer_info.k_p = 0.01f;//0.02f;//0.005818f;
+	_mixer_info.k_i = 0.f;//0.037584f;//0.333088f;
 	_mixer_info.int_term_lim = 1.5f;
 	_mixer_info.p_term_lim = 4.f;
 	_mixer_info.control_interval = SCHEDULE_INTERVAL;
@@ -1132,6 +1132,45 @@ TSFMU::fit_curve(){
 			(double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
 			(double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
 
+	param_t param_handle;
+
+
+	// maximum motor slew rate parameter
+	param_handle = param_find("TS_MOT0_KW2");
+
+	if (param_handle != PARAM_INVALID) {
+		param_set(param_handle,&coeff_l(0));
+	}
+
+	param_handle = param_find("TS_MOT0_KW");
+
+	if (param_handle != PARAM_INVALID) {
+		param_set(param_handle, &coeff_l(1));
+	}
+
+	param_handle = param_find("TS_MOT0_KC");
+
+	if (param_handle != PARAM_INVALID) {
+		param_set(param_handle, &coeff_l(2));
+	}
+
+//	param_handle = param_find("TS_MOT1_KW2");
+//
+//	if (param_handle != PARAM_INVALID) {
+//		param_set(param_handle, coeff_r(0));
+//	}
+//
+//	param_handle = param_find("TS_MOT1_KW");
+//
+//	if (param_handle != PARAM_INVALID) {
+//		param_set(param_handle, coeff_r(1));
+//	}
+//
+//	param_handle = param_find("TS_MOT1_KC");
+//
+//	if (param_handle != PARAM_INVALID) {
+//		param_set(param_handle, coeff_r(2));
+//	}
 
 	pwm_outputs[0] = -1;
 
@@ -1389,9 +1428,9 @@ TSFMU::update_pwm_out_state(bool on)
 
 void
 TSFMU::cycle()
-{perf_count(_cycle_exec);
- perf_begin(_ctl_latency);
-
+{	perf_count(_cycle_exec);
+ 	perf_begin(_ctl_latency);
+ 	bool force_param_update = false;
 	if (!_initialized) {
 		/* force a reset of the update rate */
 		_current_update_rate = 0;
@@ -1405,6 +1444,7 @@ TSFMU::cycle()
 		pwm_limit_init(&_pwm_limit);//set limit->state=PWM_LIMIT_STATE_INIT, limit->time_armed = 0
 
 		_initialized = true;
+		force_param_update = true;
 	}
 
 	if (_groups_subscribed != _groups_required) {
@@ -1744,7 +1784,7 @@ TSFMU::cycle()
 
 	orb_check(_param_sub, &updated);
 
-	if (updated) {
+	if (updated || force_param_update) {
 		parameter_update_s pupdate;
 		orb_copy(ORB_ID(parameter_update), _param_sub, &pupdate);
 
@@ -1767,25 +1807,54 @@ TSFMU::cycle()
 			param_get(param_handle, &_thr_mdl_fac);
 		}
 
-		// update rpm controller gain
-		param_handle = param_find("TS_RPMC_P");
+		// update mot controller gain
+		param_handle = param_find("TS_MOT_P");
 		if(param_handle != PARAM_INVALID){
 			param_get(param_handle, &_mixer_info.k_p);
 			_ts_mixer->update_mixer_info(&_mixer_info);
 		}
 
-		param_handle = param_find("TS_RPMC_I");
+		param_handle = param_find("TS_MOT_I");
 		if(param_handle != PARAM_INVALID){
 			param_get(param_handle, &_mixer_info.k_i);
 			_ts_mixer->update_mixer_info(&_mixer_info);
 		}
 
-		param_handle = param_find("TS_RPMC_PL");
+		param_handle = param_find("TS_MOT0_KW2");
 		if(param_handle != PARAM_INVALID){
-			param_get(param_handle, &_mixer_info.p_term_lim);
+			param_get(param_handle, &_mixer_info.k_w2[0]);
 			_ts_mixer->update_mixer_info(&_mixer_info);
 		}
 
+		param_handle = param_find("TS_MOT0_KW");
+		if(param_handle != PARAM_INVALID){
+			param_get(param_handle, &_mixer_info.k_w[0]);
+			_ts_mixer->update_mixer_info(&_mixer_info);
+		}
+
+		param_handle = param_find("TS_MOT0_KC");
+		if(param_handle != PARAM_INVALID){
+			param_get(param_handle, &_mixer_info.k_c[0]);
+			_ts_mixer->update_mixer_info(&_mixer_info);
+		}
+
+		param_handle = param_find("TS_MOT1_KW2");
+		if(param_handle != PARAM_INVALID){
+			param_get(param_handle, &_mixer_info.k_w2[1]);
+			_ts_mixer->update_mixer_info(&_mixer_info);
+		}
+
+		param_handle = param_find("TS_MOT1_KW");
+		if(param_handle != PARAM_INVALID){
+			param_get(param_handle, &_mixer_info.k_w[1]);
+			_ts_mixer->update_mixer_info(&_mixer_info);
+		}
+
+		param_handle = param_find("TS_MOT1_KC");
+		if(param_handle != PARAM_INVALID){
+			param_get(param_handle, &_mixer_info.k_c[1]);
+			_ts_mixer->update_mixer_info(&_mixer_info);
+		}
 	}
 	perf_end(_ctl_latency);
 
