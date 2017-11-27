@@ -679,7 +679,7 @@ MulticopterPositionControl::poll_subscriptions()
 		/* set correct uORB ID, depending on if vehicle is VTOL or not */
 		if (!_attitude_setpoint_id) {
 			if (_vehicle_status.is_vtol) {
-				_attitude_setpoint_id = ORB_ID(mc_virtual_attitude_setpoint);
+				_attitude_setpoint_id = ORB_ID(vehicle_attitude_setpoint);
 
 			} else {
 				_attitude_setpoint_id = ORB_ID(vehicle_attitude_setpoint);
@@ -1130,6 +1130,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 	if (_pos_sp_triplet.current.valid
 	    && _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF
 	    && _control_mode.flag_armed) {
+		_run_alt_control = false;
 
 		// check if we are not already in air.
 		// if yes then we don't need a jumped takeoff anymore
@@ -1138,6 +1139,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 		}
 
 		if (!_takeoff_jumped) {
+			printf("taking off");
 			// ramp thrust setpoint up
 			if (_vel(2) > -(_params.tko_speed / 2.0f)) {
 				_takeoff_thrust_sp += 0.5f * dt;

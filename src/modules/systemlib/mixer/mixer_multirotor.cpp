@@ -244,6 +244,8 @@ MultirotorMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 		float out = roll * _rotors[i].roll_scale +
 			    pitch * _rotors[i].pitch_scale +
 			    thrust;
+//				printf("ROTOR %d roll_scale: %f\n", i, (double) _rotors[i].pitch_scale);
+//				printf("THRUST %f\n", (double) thrust);
 
 		out *= _rotors[i].out_scale;
 
@@ -411,6 +413,7 @@ MultirotorMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	}
 
 	return _rotor_count;
+
 }
 
 /*

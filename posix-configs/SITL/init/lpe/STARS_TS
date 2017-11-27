@@ -64,6 +64,7 @@ adcsim start
 gpssim start
 measairspeedsim start
 pwm_out_sim mode_pwm
+ts_att_control start
 sleep 1
 sensors start
 commander start
@@ -71,11 +72,7 @@ land_detector start vtol
 navigator start
 attitude_estimator_q start
 local_position_estimator start
-vtol_att_control start
-mc_att_control start
 mc_pos_control start
-fw_att_control start
-fw_pos_control_l1 start
 mixer load /dev/pwm_output0 ROMFS/px4fmu_common/mixers/caipirinha_vtol.main.mix
 mavlink start -u 14556 -r 2000000
 mavlink start -u 14557 -r 2000000 -m onboard -o 14540
@@ -88,6 +85,7 @@ mavlink stream -r 80 -s ATTITUDE_TARGET -u 14556
 mavlink stream -r 20 -s RC_CHANNELS -u 14556
 mavlink stream -r 250 -s HIGHRES_IMU -u 14556
 mavlink stream -r 10 -s OPTICAL_FLOW_RAD -u 14556
+mavlink stream -r 250 -s HIL_ACTUATOR_CONTROLS -u 14556
 sdlog2 start -r 200 -e -t -a
 mavlink boot_complete
 replay trystart

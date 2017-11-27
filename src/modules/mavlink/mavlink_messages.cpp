@@ -55,7 +55,7 @@
 #include <systemlib/mavlink_log.h>
 
 #include <uORB/topics/actuator_armed.h>
-#include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/airspeed.h>
 #include <uORB/topics/att_pos_mocap.h>
@@ -2348,7 +2348,7 @@ protected:
 	explicit MavlinkStreamHILActuatorControls(Mavlink *mavlink) : MavlinkStream(mavlink),
 		_status_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_status))),
 		_status_time(0),
-		_act_sub(_mavlink->add_orb_subscription(ORB_ID(actuator_outputs))),
+		_act_sub(_mavlink->add_orb_subscription(ORB_ID(ts_actuator_outputs_virtual))),
 		_act_time(0)
 	{}
 
@@ -2412,14 +2412,17 @@ protected:
 				}
 
 				for (unsigned i = 0; i < 16; i++) {
-					if (act.output[i] > PWM_DEFAULT_MIN / 2) {
+					//if (act.output[i] > PWM_DEFAULT_MIN / 2) {
+					if (true) {
 						if (i < n) {
 							/* scale PWM out 900..2100 us to 0..1 for rotors */
-							msg.controls[i] = (act.output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
-
+							//msg.controls[i] = (act.output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
+							msg.controls[i] = act.output[i];
+							//warnx("Controls[%d]: %f", i , (double) act.output[i]);
 						} else {
 							/* scale PWM out 900..2100 us to -1..1 for other channels */
-							msg.controls[i] = (act.output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
+							//msg.controls[i] = (act.output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
+							msg.controls[i] = act.output[i];
 						}
 
 					} else {

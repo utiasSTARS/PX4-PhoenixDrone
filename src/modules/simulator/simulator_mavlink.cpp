@@ -129,14 +129,18 @@ void Simulator::pack_actuator_message(mavlink_hil_actuator_controls_t &msg, unsi
 		}
 
 		for (unsigned i = 0; i < 16; i++) {
-			if (_actuators[index].output[i] > PWM_DEFAULT_MIN / 2) {
+			//if (_actuators[index].output[i] > PWM_DEFAULT_MIN / 2) {
+			if(true){
 				if (i < n) {
 					/* scale PWM out PWM_DEFAULT_MIN..PWM_DEFAULT_MAX us to 0..1 for rotors */
-					msg.controls[i] = (_actuators[index].output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
+					//msg.controls[i] = (_actuators[index].output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
+					msg.controls[i] = _actuators[index].output[i];
+					//warnx("Control[%d]: %f", i, (double) _actuators[index].output[i]);
 
 				} else {
 					/* scale PWM out PWM_DEFAULT_MIN..PWM_DEFAULT_MAX us to -1..1 for other channels */
-					msg.controls[i] = (_actuators[index].output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
+					//msg.controls[i] = (_actuators[index].output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
+					msg.controls[i] = _actuators[index].output[i];
 				}
 
 			} else {
@@ -521,7 +525,7 @@ void Simulator::poll_topics()
 		orb_check(_actuator_outputs_sub[i], &updated);
 
 		if (updated) {
-			orb_copy(ORB_ID(actuator_outputs), _actuator_outputs_sub[i], &_actuators[i]);
+			orb_copy(ORB_ID(ts_actuator_outputs_virtual), _actuator_outputs_sub[i], &_actuators[i]);
 		}
 	}
 
@@ -738,7 +742,7 @@ void Simulator::pollForMAVLinkMessages(bool publish, int udp_port)
 
 	// subscribe to topics
 	for (unsigned i = 0; i < (sizeof(_actuator_outputs_sub) / sizeof(_actuator_outputs_sub[0])); i++) {
-		_actuator_outputs_sub[i] = orb_subscribe_multi(ORB_ID(actuator_outputs), i);
+		_actuator_outputs_sub[i] = orb_subscribe(ORB_ID(ts_actuator_outputs_virtual));
 	}
 
 	_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));

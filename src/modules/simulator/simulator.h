@@ -331,7 +331,7 @@ private:
 	orb_advert_t _lpos_pub;
 
 	// uORB subscription handlers
-	int _actuator_outputs_sub[ORB_MULTI_MAX_INSTANCES];
+	int _actuator_outputs_sub[1];
 	int _vehicle_attitude_sub;
 	int _manual_sub;
 	int _vehicle_status_sub;
@@ -346,7 +346,7 @@ private:
 
 	// uORB data containers
 	struct rc_input_values _rc_input;
-	struct actuator_outputs_s _actuators[ORB_MULTI_MAX_INSTANCES];
+	struct actuator_outputs_s _actuators[1];
 	struct vehicle_attitude_s _attitude;
 	struct manual_control_setpoint_s _manual;
 	struct vehicle_status_s _vehicle_status;
