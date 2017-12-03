@@ -652,6 +652,11 @@ TailsitterAttitudeControl::control_attitude(float dt)
 	/* get current rotation matrix from control state quaternions */
 	math::Quaternion q_att(_ctrl_state.q[0], _ctrl_state.q[1], _ctrl_state.q[2], _ctrl_state.q[3]);
 	math::Matrix<3, 3> R = q_att.to_dcm();
+//	warnx("ROTATION MATRIX Body x: %f, %f, %f",(double) R(0,0),(double) R(1,0),(double) R(2,0));
+//	warnx("ROTATION MATRIX Body y: %f, %f, %f",(double) R(0,1),(double) R(1,1),(double) R(2,1));
+//	warnx("ROTATION MATRIX Body z: %f, %f, %f",(double) R(0,2),(double) R(1,2),(double) R(2,2));
+//	warnx("CONTROL_STATE: %f, %f, %f, %f", (double) q_att(0), (double) q_att(1), (double) q_att(2), (double) q_att(3));
+
 
 	/* all input data is ready, run controller itself */
 
@@ -1006,9 +1011,12 @@ TailsitterAttitudeControl::task_main()
 			if(_armed.armed){
 				math::Vector<3> momentum_ref;
 				momentum_ref.zero();
-				for(int i=0; i<3; i++){
-					momentum_ref(i) = _actuators.control[i];
-				}
+
+				momentum_ref(0) = _actuators.control[1];
+				momentum_ref(1) = -_actuators.control[0];
+				momentum_ref(2) = _actuators.control[2];
+				warnx("momentum_ref %f\n", (double) momentum_ref(1));
+
 				_ts_rate_control->mix(_actuators.control[3], momentum_ref, outputs);
 			}
 			_actuator_outputs.noutputs = 6;
@@ -1018,6 +1026,9 @@ TailsitterAttitudeControl::task_main()
 			_actuator_outputs.output[4] = (PX4_ISFINITE(outputs[2])) ? outputs[2] : 0.0f;
 			_actuator_outputs.output[5] = (PX4_ISFINITE(outputs[3])) ? outputs[3] : 0.0f;
 
+//			for (int i = 0; i< 4; i++){
+//				warnx("outputs %d: %f\n", i, (double) outputs[i]);
+//			}
 			if (_controller_status_pub != nullptr) {
 				orb_publish(ORB_ID(ts_actuator_outputs_virtual), _actuator_outputs_pub, &_actuator_outputs);
 

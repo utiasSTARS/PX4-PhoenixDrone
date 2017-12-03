@@ -50,7 +50,7 @@
  * @increment 0.01
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_THR_MIN, 0.12f);
+PARAM_DEFINE_FLOAT(MPC_THR_MIN, 0.2f);
 
 /**
  * Hover thrust
@@ -111,12 +111,12 @@ PARAM_DEFINE_FLOAT(MPC_ALTCTL_DY, 0.0f);
  *
  * @unit norm
  * @min 0.0
- * @max 0.95
+ * @max 12
  * @decimal 2
  * @increment 0.01
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_THR_MAX, 0.9f);
+PARAM_DEFINE_FLOAT(MPC_THR_MAX, 10.f);
 
 /**
  * Minimum manual thrust

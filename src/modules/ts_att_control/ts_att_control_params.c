@@ -210,7 +210,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_RATE_MX, 40.f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_YAW_P, 6.5f);
+PARAM_DEFINE_FLOAT(TS_YAW_P, 3f);
 /**
  * TS Yaw I Gain
  *
@@ -270,7 +270,7 @@ PARAM_DEFINE_FLOAT(TS_YAW_TC, 0.2f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_YAW_RATE_TC, 0.2f);
+PARAM_DEFINE_FLOAT(TS_YAW_RATE_TC, 0.5f);
 /**
  * TS Yaw Max (Deg)
  *
@@ -390,7 +390,7 @@ PARAM_DEFINE_FLOAT(TS_MOMT_CONST_R, 0.3f);
  * @increment 0.000000001
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_MOMT_CONST_P, -0.000000344f);
+PARAM_DEFINE_FLOAT(TS_MOMT_CONST_P, 0.000000344f);
 /**
  * TS Momentum Constant - motor constant
  *

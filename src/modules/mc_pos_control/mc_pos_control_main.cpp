@@ -1799,6 +1799,11 @@ MulticopterPositionControl::control_position(float dt)
 			thrust_sp(2) = 0.0f;
 		}
 
+		math::Vector<3> gravity(0, 0, 0.7f * ONE_G);
+		math::Vector<3> f_prop = thrust_sp * ONE_G - gravity;
+		thrust_sp = f_prop;
+
+
 		/* limit thrust vector and check for saturation */
 		bool saturation_xy = false;
 		bool saturation_z = false;
@@ -1978,6 +1983,12 @@ MulticopterPositionControl::control_position(float dt)
 			}
 		}
 
+		/* save thrust setpoint for logging */
+		_local_pos_sp.acc_x = thrust_sp(0)* ONE_G;
+		_local_pos_sp.acc_y = thrust_sp(1)* ONE_G;
+		_local_pos_sp.acc_z = thrust_sp(2)* ONE_G;
+
+
 		/* calculate attitude setpoint from thrust vector */
 		if (_control_mode.flag_control_velocity_enabled || _control_mode.flag_control_acceleration_enabled) {
 			/* desired body_z axis = -normalize(thrust_vector) */
@@ -1994,16 +2005,27 @@ MulticopterPositionControl::control_position(float dt)
 				body_z(2) = 1.0f;
 			}
 
-			/* vector of desired yaw direction in XY plane, rotated by PI/2 */
-			math::Vector<3> y_C(-sinf(_att_sp.yaw_body), cosf(_att_sp.yaw_body), 0.0f);
+			/* Set Yaw s.t. thrust lies on x-z plane */
+			float l = thrust_sp(0) * thrust_sp(0) + thrust_sp(1) * thrust_sp(1);
+			l = pow(l,0.5f);
+			float psi = asin(thrust_sp(0) / l);
+
+			math::Vector<3> y_C(sin(psi), cos(psi), 0.0f);
+			y_C.zero();
+			y_C(1) = 1.0f;
+			if(fabsf(thrust_sp(0)) < 0.01f && fabsf(thrust_sp(1)) < 0.001f){
+				y_C(0) = 0.0f;
+				y_C(1) = 1.0f;
+			}
 
 			if (fabsf(body_z(2)) > SIGMA) {
 				/* desired body_x axis, orthogonal to body_z */
-				body_x = y_C % body_z;
+				body_x =  y_C % body_z ;
 
 				/* keep nose to front while inverted upside down */
 				if (body_z(2) < 0.0f) {
-					body_x = -body_x;
+					body_x.zero();
+					body_x(0) =1.0f;
 				}
 
 				body_x.normalize();
@@ -2011,8 +2033,8 @@ MulticopterPositionControl::control_position(float dt)
 			} else {
 				/* desired thrust is in XY plane, set X downside to construct correct matrix,
 				 * but yaw component will not be used actually */
-				body_x.zero();
-				body_x(2) = 1.0f;
+				body_z.zero();
+				body_z(2) = 1.0f;
 			}
 
 			/* desired body_y axis */
@@ -2023,11 +2045,18 @@ MulticopterPositionControl::control_position(float dt)
 				_R_setpoint(i, 0) = body_x(i);
 				_R_setpoint(i, 1) = body_y(i);
 				_R_setpoint(i, 2) = body_z(i);
+				warnx("Body X %d:, %f\n", i, (double) body_x(i));
+				warnx("Body Y %d:, %f\n", i, (double) body_y(i));
+				warnx("Body Z %d:, %f\n", i, (double) body_z(i));
 			}
+
+
 
 			/* copy quaternion setpoint to attitude setpoint topic */
 			matrix::Quatf q_sp = _R_setpoint;
 			memcpy(&_att_sp.q_d[0], q_sp.data(), sizeof(_att_sp.q_d));
+			for(int i=0;i<4;i++)
+				warnx("Quaternion %d: %f \n", i, (double) q_sp(i));
 			_att_sp.q_d_valid = true;
 
 			/* calculate euler angles, for logging only, must not be used for control */
@@ -2044,18 +2073,18 @@ MulticopterPositionControl::control_position(float dt)
 			/* copy quaternion setpoint to attitude setpoint topic */
 			matrix::Quatf q_sp = _R_setpoint;
 			memcpy(&_att_sp.q_d[0], q_sp.data(), sizeof(_att_sp.q_d));
+
 			_att_sp.q_d_valid = true;
 
 			_att_sp.roll_body = 0.0f;
 			_att_sp.pitch_body = 0.0f;
 		}
 
-		_att_sp.thrust = thrust_abs;
 
-		/* save thrust setpoint for logging */
-		_local_pos_sp.acc_x = thrust_sp(0) * ONE_G;
-		_local_pos_sp.acc_y = thrust_sp(1) * ONE_G;
-		_local_pos_sp.acc_z = thrust_sp(2) * ONE_G;
+
+		_att_sp.thrust = (thrust_abs) / 2.0f;
+
+
 
 		_att_sp.timestamp = hrt_absolute_time();
 
@@ -2334,6 +2363,7 @@ MulticopterPositionControl::task_main()
 			_control_mode.flag_control_acceleration_enabled))) {
 
 			if (_att_sp_pub != nullptr) {
+
 				orb_publish(_attitude_setpoint_id, _att_sp_pub, &_att_sp);
 
 			} else if (_attitude_setpoint_id) {
