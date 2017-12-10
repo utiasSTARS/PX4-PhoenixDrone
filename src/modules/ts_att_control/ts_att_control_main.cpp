@@ -1015,7 +1015,7 @@ TailsitterAttitudeControl::task_main()
 				momentum_ref(0) = _actuators.control[1];
 				momentum_ref(1) = -_actuators.control[0];
 				momentum_ref(2) = _actuators.control[2];
-				warnx("momentum_ref %f\n", (double) momentum_ref(1));
+
 
 				_ts_rate_control->mix(_actuators.control[3], momentum_ref, outputs);
 			}
@@ -1117,7 +1117,6 @@ TailsitterAttitudeControl::start()
 					   1500,
 					   (px4_main_t)&TailsitterAttitudeControl::task_main_trampoline,
 					   nullptr);
-	warnx("Started ts att control\n");
 	if (_control_task < 0) {
 		warn("task start failed");
 		return -errno;

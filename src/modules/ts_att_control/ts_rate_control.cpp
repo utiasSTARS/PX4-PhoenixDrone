@@ -100,7 +100,6 @@ void TailsitterRateControl::get_delta_r(float fa, math::Vector<3> momentum_ref, 
 	float mx = momentum_ref(0);
 	float my = momentum_ref(1);
 	float mz = momentum_ref(2);
-	warnx("%f, %f, %f, %f\n", (double) (_kl*_kt*my*_l*_l) , (double) (_kp*_kt*mz*_l), (double) (mx), (double) (_kl*_kp*_l*(mx - 2*fa*_l) * 100000000000.f));
 	*delta_r = (_kl*_kt*my*_l*_l - _kp*_kt*mz*_l + _km*_kp*_kt*mx)/(_kl*_kp*_l*(mx - 2*fa*_l));
 }
 

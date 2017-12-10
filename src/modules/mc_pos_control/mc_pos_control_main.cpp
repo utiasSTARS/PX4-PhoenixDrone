@@ -675,6 +675,7 @@ MulticopterPositionControl::poll_subscriptions()
 
 	if (updated) {
 		orb_copy(ORB_ID(vehicle_status), _vehicle_status_sub, &_vehicle_status);
+		//warnx("Status:%d", _vehicle_status.nav_state);
 
 		/* set correct uORB ID, depending on if vehicle is VTOL or not */
 		if (!_attitude_setpoint_id) {
@@ -729,6 +730,7 @@ MulticopterPositionControl::poll_subscriptions()
 
 	if (updated) {
 		orb_copy(ORB_ID(vehicle_control_mode), _control_mode_sub, &_control_mode);
+
 	}
 
 	orb_check(_manual_sub, &updated);
@@ -792,7 +794,9 @@ MulticopterPositionControl::poll_subscriptions()
 		    !PX4_ISFINITE(_pos_sp_triplet.current.lon) ||
 		    !PX4_ISFINITE(_pos_sp_triplet.current.alt)) {
 			_pos_sp_triplet.current.valid = false;
+
 		}
+
 	}
 }
 
@@ -1799,10 +1803,11 @@ MulticopterPositionControl::control_position(float dt)
 			thrust_sp(2) = 0.0f;
 		}
 
-		math::Vector<3> gravity(0, 0, 0.7f * ONE_G);
-		math::Vector<3> f_prop = thrust_sp * ONE_G - gravity;
+		math::Vector<3> gravity(0, 0, 0.75f * ONE_G);
+		math::Vector<3> f_prop = thrust_sp * 0.75f*  ONE_G - gravity;
+		//warnx("Before Before Thrust setpoint: %f, %f, %f\n", (double)thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
 		thrust_sp = f_prop;
-
+		//warnx("Before Thrust setpoint: %f, %f, %f\n", (double)thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
 
 		/* limit thrust vector and check for saturation */
 		bool saturation_xy = false;
@@ -1984,9 +1989,10 @@ MulticopterPositionControl::control_position(float dt)
 		}
 
 		/* save thrust setpoint for logging */
-		_local_pos_sp.acc_x = thrust_sp(0)* ONE_G;
-		_local_pos_sp.acc_y = thrust_sp(1)* ONE_G;
-		_local_pos_sp.acc_z = thrust_sp(2)* ONE_G;
+		_local_pos_sp.acc_x = thrust_sp(0);
+		_local_pos_sp.acc_y = thrust_sp(1);
+		_local_pos_sp.acc_z = thrust_sp(2);
+		//warnx("Thrust setpoint: %f, %f, %f\n", (double)thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
 
 
 		/* calculate attitude setpoint from thrust vector */
@@ -2009,10 +2015,15 @@ MulticopterPositionControl::control_position(float dt)
 			float l = thrust_sp(0) * thrust_sp(0) + thrust_sp(1) * thrust_sp(1);
 			l = pow(l,0.5f);
 			float psi = asin(thrust_sp(0) / l);
-
+			psi = _att_sp.yaw_body;
 			math::Vector<3> y_C(sin(psi), cos(psi), 0.0f);
-			y_C.zero();
-			y_C(1) = 1.0f;
+			if(!_pos_sp_triplet.current.yaw_valid || std::isnan(psi)){
+				y_C.zero();
+				y_C(1) = 1.0f;
+				//warnx("Yaw %f \n", (double) psi);
+
+			}
+
 			if(fabsf(thrust_sp(0)) < 0.01f && fabsf(thrust_sp(1)) < 0.001f){
 				y_C(0) = 0.0f;
 				y_C(1) = 1.0f;
@@ -2045,9 +2056,6 @@ MulticopterPositionControl::control_position(float dt)
 				_R_setpoint(i, 0) = body_x(i);
 				_R_setpoint(i, 1) = body_y(i);
 				_R_setpoint(i, 2) = body_z(i);
-				warnx("Body X %d:, %f\n", i, (double) body_x(i));
-				warnx("Body Y %d:, %f\n", i, (double) body_y(i));
-				warnx("Body Z %d:, %f\n", i, (double) body_z(i));
 			}
 
 
@@ -2055,8 +2063,6 @@ MulticopterPositionControl::control_position(float dt)
 			/* copy quaternion setpoint to attitude setpoint topic */
 			matrix::Quatf q_sp = _R_setpoint;
 			memcpy(&_att_sp.q_d[0], q_sp.data(), sizeof(_att_sp.q_d));
-			for(int i=0;i<4;i++)
-				warnx("Quaternion %d: %f \n", i, (double) q_sp(i));
 			_att_sp.q_d_valid = true;
 
 			/* calculate euler angles, for logging only, must not be used for control */
