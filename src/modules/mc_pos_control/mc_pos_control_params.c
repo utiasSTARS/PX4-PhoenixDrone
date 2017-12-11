@@ -468,3 +468,78 @@ PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 5.0f);
  * @group Multicopter Position Control
  */
 PARAM_DEFINE_INT32(MPC_ALT_MODE, 0);
+
+
+/**
+ * Position controller time constant X
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_TC_X, 0.6f);
+
+/**
+ * Position controller time constant Y
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_TC_Y, 0.9f);
+
+/**
+ * Position controller time constant Z
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_TC_Z, 0.3f);
+
+/**
+ * Position controller damping ratios X
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_DR_X, 0.6f);
+
+/**
+ * Position controller damping ratios Y
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_DR_Y, 0.5f);
+
+/**
+ * Position controller damping ratios Z
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_DR_Z, 1.3f);
+
+

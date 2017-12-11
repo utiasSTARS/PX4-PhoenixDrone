@@ -2037,7 +2037,7 @@ Mavlink::task_main(int argc, char *argv[])
 
 	case MAVLINK_MODE_CUSTOM:
 		configure_stream("SYS_STATUS", 1.0f);
-		configure_stream("HIGHRES_IMU", 25.0f);
+		configure_stream("HIGHRES_IMU", 100.0f);
 		configure_stream("ATTITUDE", 50.0f);
 		configure_stream("HIL_STATE_QUATERNION", 25.0f);
 		configure_stream("GROUND_TRUTH", 80.0f);
@@ -2047,9 +2047,9 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("ESTIMATOR_STATUS", 1.0f);
 		configure_stream("NAV_CONTROLLER_OUTPUT", 1.5f);
 		//configure_stream("GLOBAL_POSITION_INT", 10.0f);
-		configure_stream("LOCAL_POSITION_NED", 25.0f);
+		configure_stream("LOCAL_POSITION_NED", 100.0f);
 		//configure_stream("POSITION_TARGET_GLOBAL_INT", 10.0f);
-		configure_stream("POSITION_TARGET_LOCAL_NED", 25.0f);
+		configure_stream("POSITION_TARGET_LOCAL_NED", 100.0f);
 		configure_stream("ATTITUDE_TARGET", 25.0f);
 		configure_stream("ACTUATOR_CONTROL_TARGET0", 50.0f);
 		configure_stream("HIL_ACTUATOR_CONTROLS", 50.0f);
