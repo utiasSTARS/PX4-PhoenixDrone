@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cdtprojectproperties>
+<section name="org.eclipse.cdt.internal.ui.wizards.settingswizards.IncludePaths">
+<language name="C++ Source File">
+<includepath workspace_path="true">/PX4-FlightX/uORB</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/ecl</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/modules/systemlib</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/geo</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/platforms</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/modules/uORB</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/include</includepath>
+<includepath workspace_path="true">/PX4-FlightX/uORB/topics</includepath>
+<includepath workspace_path="true">/PX4-FlightX</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/drivers/boards/px4fmu-v4</includepath>
+<includepath>/usr/include/gazebo-7</includepath>
+<includepath>/usr/include/boost</includepath>
+<includepath workspace_path="true">/PX4-FlightX/build_gazebo</includepath>
+<includepath>/usr/include/sdformat-4.4</includepath>
+
+</language>
+<language name="C Source File">
+<includepath workspace_path="true">/PX4-FlightX/uORB</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/ecl</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/ecl/attitude_fw</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/modules/systemlib</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/geo</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/platforms</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/modules/uORB</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/include</includepath>
+<includepath workspace_path="true">/PX4-FlightX/uORB/topics</includepath>
+<includepath workspace_path="true">/PX4-FlightX</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/drivers/boards/px4fmu-v4</includepath>
+<includepath>/usr/include/gazebo-7</includepath>
+<includepath>/usr/include/boost</includepath>
+<includepath workspace_path="true">/PX4-FlightX/build_gazebo</includepath>
+<includepath>/usr/include/sdformat-4.4</includepath>
+
+</language>
+<language name="Object File">
+
+</language>
+<language name="Assembly Source File">
+<includepath workspace_path="true">/PX4-FlightX/uORB</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/ecl</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/ecl/attitude_fw</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/modules/systemlib</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/lib/geo</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/platforms</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/modules/uORB</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/include</includepath>
+<includepath workspace_path="true">/PX4-FlightX/uORB/topics</includepath>
+<includepath workspace_path="true">/PX4-FlightX</includepath>
+<includepath workspace_path="true">/PX4-FlightX/src/drivers/boards/px4fmu-v4</includepath>
+<includepath>/usr/include/gazebo-7</includepath>
+<includepath>/usr/include/boost</includepath>
+<includepath workspace_path="true">/PX4-FlightX/build_gazebo</includepath>
+<includepath>/usr/include/sdformat-4.4</includepath>
+
+</language>
+</section>
+<section name="org.eclipse.cdt.internal.ui.wizards.settingswizards.Macros">
+<language name="C++ Source File">
+<macro>
+<name>__PX4_POSIX</name><value>1</value>
+</macro>
+<macro>
+<name>__PX4_LINUX</name><value>1</value>
+</macro>
+<macro>
+<name>__cplusplus</name><value>201103L</value>
+</macro>
+<macro>
+<name>__EXPORT</name><value/>
+</macro>
+
+</language>
+<language name="C Source File">
+<macro>
+<name>__PX4_POSIX</name><value>1</value>
+</macro>
+<macro>
+<name>__PX4_LINUX</name><value>1</value>
+</macro>
+<macro>
+<name>__cplusplus</name><value>1</value>
+</macro>
+<macro>
+<name>__EXPORT</name><value/>
+</macro>
+
+</language>
+<language name="Object File">
+
+</language>
+<language name="Assembly Source File">
+
+</language>
+</section>
+</cdtprojectproperties>
