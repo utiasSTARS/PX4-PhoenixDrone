@@ -2663,8 +2663,10 @@ protected:
 			msg.time_boot_ms = att_sp.timestamp / 1000;
 
 			if (att_sp.q_d_valid) {
-				memcpy(&msg.q[0], &att_sp.q_d[0], sizeof(msg.q));
-
+//				memcpy(&msg.q[0], &att_sp.q_d[0], sizeof(msg.q));
+				msg.q[0] = att_sp.roll_body;
+				msg.q[1] = att_sp.pitch_body;
+				msg.q[2] = att_sp.yaw_body;
 			} else {
 				mavlink_euler_to_quaternion(att_sp.roll_body, att_sp.pitch_body, att_sp.yaw_body, msg.q);
 			}
