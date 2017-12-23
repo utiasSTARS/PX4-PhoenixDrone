@@ -1029,7 +1029,7 @@ TailsitterAttitudeControl::task_main()
 //			for (int i = 0; i< 4; i++){
 //				warnx("outputs %d: %f\n", i, (double) outputs[i]);
 //			}
-			if (_controller_status_pub != nullptr) {
+			if (_actuator_outputs_pub != nullptr) {
 				orb_publish(ORB_ID(ts_actuator_outputs_virtual), _actuator_outputs_pub, &_actuator_outputs);
 
 			} else {

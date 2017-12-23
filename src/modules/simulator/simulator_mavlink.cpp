@@ -284,6 +284,40 @@ void Simulator::update_gps(mavlink_hil_gps_t *gps_sim)
 void Simulator::handle_message(mavlink_message_t *msg, bool publish)
 {
 	switch (msg->msgid) {
+
+	case MAVLINK_MSG_ID_ATT_POS_MOCAP:{
+		mavlink_att_pos_mocap_t mocap;
+				mavlink_msg_att_pos_mocap_decode(msg, &mocap);
+
+				struct att_pos_mocap_s att_pos_mocap = {};
+				{
+					// Use the component ID to identify the mocap system
+					att_pos_mocap.id = msg->compid;
+
+					att_pos_mocap.timestamp = hrt_absolute_time();
+					att_pos_mocap.timestamp_received = hrt_absolute_time();
+
+					att_pos_mocap.q[0] = mocap.q[0];
+					att_pos_mocap.q[1] = mocap.q[1];
+					att_pos_mocap.q[2] = mocap.q[2];
+					att_pos_mocap.q[3] = mocap.q[3];
+
+					att_pos_mocap.x = mocap.x;
+					att_pos_mocap.y = mocap.y;
+					att_pos_mocap.z = mocap.z;
+
+					if (_att_pos_mocap_pub == nullptr) {
+						_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
+
+					} else {
+						orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
+					}
+				}
+	}
+
+
+		break;
+
 	case MAVLINK_MSG_ID_HIL_SENSOR: {
 			mavlink_hil_sensor_t imu;
 			mavlink_msg_hil_sensor_decode(msg, &imu);

@@ -504,7 +504,7 @@ PARAM_DEFINE_FLOAT(TS_POS_TC_Y, 0.9f);
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_TC_Z, 0.3f);
+PARAM_DEFINE_FLOAT(TS_POS_TC_Z, 0.2f);
 
 /**
  * Position controller damping ratios X
@@ -535,11 +535,11 @@ PARAM_DEFINE_FLOAT(TS_POS_DR_Y, 0.5f);
  *
  * @unit m/s/s
  * @min 0.0
- * @max 15.0
+ * @max 20.0
  * @increment 0.01
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_DR_Z, 1.3f);
+PARAM_DEFINE_FLOAT(TS_POS_DR_Z, 1.5f);
 
 

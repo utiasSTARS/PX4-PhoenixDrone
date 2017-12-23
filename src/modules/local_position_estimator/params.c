@@ -160,7 +160,7 @@ PARAM_DEFINE_FLOAT(LPE_GPS_DELAY, 0.29f);
  * @max 5
  * @decimal 2
  */
-PARAM_DEFINE_FLOAT(LPE_GPS_XY, 1.0f);
+PARAM_DEFINE_FLOAT(LPE_GPS_XY, 5.0f);
 
 /**
  * Minimum GPS z standard deviation, uses reported EPV if greater.
@@ -171,7 +171,7 @@ PARAM_DEFINE_FLOAT(LPE_GPS_XY, 1.0f);
  * @max 200
  * @decimal 2
  */
-PARAM_DEFINE_FLOAT(LPE_GPS_Z, 3.0f);
+PARAM_DEFINE_FLOAT(LPE_GPS_Z, 200.0f);
 
 /**
  * GPS xy velocity standard deviation.
@@ -183,7 +183,7 @@ PARAM_DEFINE_FLOAT(LPE_GPS_Z, 3.0f);
  * @max 2
  * @decimal 3
  */
-PARAM_DEFINE_FLOAT(LPE_GPS_VXY, 0.25f);
+PARAM_DEFINE_FLOAT(LPE_GPS_VXY, 2f);
 
 /**
  * GPS z velocity standard deviation.
@@ -194,7 +194,7 @@ PARAM_DEFINE_FLOAT(LPE_GPS_VXY, 0.25f);
  * @max 2
  * @decimal 3
  */
-PARAM_DEFINE_FLOAT(LPE_GPS_VZ, 0.25f);
+PARAM_DEFINE_FLOAT(LPE_GPS_VZ, 2f);
 
 /**
  * Max EPH allowed for GPS initialization

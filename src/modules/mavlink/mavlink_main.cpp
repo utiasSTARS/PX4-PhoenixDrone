@@ -2039,6 +2039,7 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("SYS_STATUS", 1.0f);
 		configure_stream("HIGHRES_IMU", 100.0f);
 		configure_stream("ATTITUDE", 50.0f);
+		configure_stream("ATT_POS_MOCAP", 100.f);
 		configure_stream("HIL_STATE_QUATERNION", 25.0f);
 		configure_stream("GROUND_TRUTH", 80.0f);
 		configure_stream("SERVO_OUTPUT_RAW_0", 10.0f);

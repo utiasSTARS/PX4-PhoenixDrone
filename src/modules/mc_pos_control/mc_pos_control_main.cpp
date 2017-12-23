@@ -1099,6 +1099,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 		_hold_offboard_z = false;
 
 		/* AUTO */
+
 		control_auto(dt);
 	}
 
@@ -1162,7 +1163,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 	if (_pos_sp_triplet.current.valid
 	    && _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF
 	    && _control_mode.flag_armed) {
-		_run_alt_control = false;
+
 
 		// check if we are not already in air.
 		// if yes then we don't need a jumped takeoff anymore
@@ -1190,7 +1191,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 		}
 
 		if (_takeoff_jumped) {
-			_vel_sp(2) = -_params.tko_speed;
+			_vel_sp(2) = 0;//-_params.tko_speed;
 		}
 
 	} else {
@@ -1512,6 +1513,7 @@ void MulticopterPositionControl::control_auto(float dt)
 		/* scale result back to normal space */
 		_pos_sp = pos_sp_s.edivide(scale);
 
+
 		/* update yaw setpoint if needed */
 
 		if (_pos_sp_triplet.current.yawspeed_valid
@@ -1768,13 +1770,14 @@ MulticopterPositionControl::control_position(float dt)
 			thrust_sp = ((_pos_sp - _pos).edivide(_params.pos_tc)).edivide(_params.pos_tc) +
 						((_vel_sp - _vel).edivide(_params.pos_tc)).emult(_params.pos_dr);
 			//warnx("Thrust, %f, %f, %f", (double) thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
+
 		}
 
 		if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF
 		    && !_takeoff_jumped && !_control_mode.flag_control_manual_enabled) {
 			// for jumped takeoffs use special thrust setpoint calculated above
-			thrust_sp.zero();
-			thrust_sp(2) = -_takeoff_thrust_sp;
+//			thrust_sp.zero();
+//			thrust_sp(2) = -_takeoff_thrust_sp;
 			//warnx("Cleared");
 		}
 
@@ -1820,6 +1823,7 @@ MulticopterPositionControl::control_position(float dt)
 
 		if (_vehicle_land_detected.landed && !got_takeoff_setpoint) {
 			// Keep throttle low while still on ground.
+
 			thr_max = 0.0f;
 
 		} else if (!_control_mode.flag_control_manual_enabled && _pos_sp_triplet.current.valid &&
