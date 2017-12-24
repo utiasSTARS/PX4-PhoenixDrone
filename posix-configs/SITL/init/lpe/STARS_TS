@@ -60,6 +60,7 @@ param set ATT_W_GYRO_BIAS 0.2
 param set ATT_W_MAG 0.1
 param set MPC_TKO_SPEED 0.8
 param set CBRK_GPSFAIL 240024
+param set MIS_TAKEOFF_ALT 1.5
 replay tryapplyparams
 simulator start -s
 rgbledsim start
