@@ -14,6 +14,8 @@
 #include <uORB/topics/offboard_control_mode.h>
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/position_setpoint.h>
+#include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/parameter_update.h>
 
 
 class __EXPORT TailsitterPathPlanner{
@@ -34,14 +36,41 @@ private:
 	orb_advert_t _v_control_mode_pub;
 	orb_advert_t _position_setpoint_pub;
 
+	int	_params_sub;
+	int _local_pos_sub;
+
 	struct offboard_control_mode_s		_control_mode;
 	struct position_setpoint_triplet_s 	_pos_sp_triplet;
+	struct vehicle_local_position_s		_local_pos;
+
+	struct{
+		math::Vector<3>	cruise_speed_max;
+		float			cruise_speed;
+	}_params;
+
+	struct{
+		param_t	z_cruise_speed;
+		param_t xy_cruise_speed;
+		param_t cruise_speed;
+	}_param_handles;
+
+	struct{
+		uint64_t start_time;
+		math::Vector<3> end_point;
+		math::Vector<3> start_point;
+		math::Vector<3> direction;
+		math::Vector<3> velocity;
+		float speed;
+		float	yaw;
+	}_waypoint;
 
 	static void	task_main_trampoline(int argc, char *argv[]);
 	void task_main();
-	void _publish_setpoint();
-	void _publish_control_mode();
-	void _reset_control_mode();
+	void publish_setpoint();
+	void publish_control_mode();
+	void reset_control_mode();
+	void params_update(bool force_update);
+	void poll_subscriptions();
 };
 
 

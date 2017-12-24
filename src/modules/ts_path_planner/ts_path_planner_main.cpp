@@ -20,6 +20,7 @@
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
 #include <systemlib/px4_macros.h>
+#include "systemlib/param/param.h"
 #include <lib/mathlib/mathlib.h>
 #include "ts_path_planner.h"
 
@@ -42,9 +43,26 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_control_mode_updated(false),
 		_v_control_mode_pub(nullptr),
 		_position_setpoint_pub(nullptr),
+		_params_sub(-1),
+		_local_pos_sub(-1),
 		_control_mode{},
-		_pos_sp_triplet{}
+		_pos_sp_triplet{},
+		_local_pos{}
 {
+	_params.cruise_speed_max.zero();
+	_params.cruise_speed = 0;
+	_param_handles.z_cruise_speed = param_find("TS_CRUISE_MAX_Z");
+	_param_handles.xy_cruise_speed = param_find("TS_CRUISE_MAX_XY");
+	_param_handles.cruise_speed = param_find("TS_CRUISE_SPEED");
+	params_update(true);
+
+	_waypoint.start_time = hrt_absolute_time();
+	_waypoint.end_point.zero();
+	_waypoint.direction.zero();
+	_waypoint.start_point.zero();
+	_waypoint.velocity.zero();
+	_waypoint.yaw = 0;
+
 }
 
 TailsitterPathPlanner::~TailsitterPathPlanner()
@@ -80,7 +98,7 @@ TailsitterPathPlanner::start(){
 	_planner_task = px4_task_spawn_cmd("ts_att_control",
 					   SCHED_DEFAULT,
 					   SCHED_PRIORITY_MAX - 5,
-					   1500,
+					   3000,
 					   (px4_main_t)&TailsitterPathPlanner::task_main_trampoline,
 					   nullptr);
 
@@ -101,20 +119,58 @@ TailsitterPathPlanner::task_main_trampoline(int argc, char *argv[])
 void
 TailsitterPathPlanner::task_main()
 {
-	_reset_control_mode();
+	reset_control_mode();
+	_params_sub = orb_subscribe(ORB_ID(parameter_update));
+	_local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 
 	while(!_task_should_exit){
+		poll_subscriptions();
 		if (_setpoint_updated){
 
-			_publish_setpoint();
-			_setpoint_updated = false;
+				float dt = (hrt_absolute_time() - _waypoint.start_time)/1e6f;
+				math::Vector<3> next_point = _waypoint.start_point + _waypoint.direction * dt * _waypoint.speed;
+				math::Vector<3> velocity = _waypoint.velocity;
+
+				if((next_point - _waypoint.end_point).length()< 0.1f){
+					_setpoint_updated = false;
+					next_point = _waypoint.end_point;
+					velocity.zero();
+				}
+
+				_pos_sp_triplet.previous = _pos_sp_triplet.current;
+				_pos_sp_triplet.current.valid = true;
+				_pos_sp_triplet.current.position_valid = true;
+				_pos_sp_triplet.current.velocity_valid = true;
+				_pos_sp_triplet.current.velocity_frame = position_setpoint_s::VELOCITY_FRAME_LOCAL_NED;
+				_pos_sp_triplet.current.type = position_setpoint_s::SETPOINT_TYPE_OFFBOARD;
+				_pos_sp_triplet.current.alt_valid = false;
+				_pos_sp_triplet.current.yawspeed_valid = false;
+
+				_pos_sp_triplet.current.acceleration_valid =  false;
+				_pos_sp_triplet.current.yaw_valid = true;
+				_pos_sp_triplet.current.x = next_point(0);
+				_pos_sp_triplet.current.y = next_point(1);
+				_pos_sp_triplet.current.z = next_point(2);
+				_pos_sp_triplet.current.vx = velocity(0);
+				_pos_sp_triplet.current.vy = velocity(1);
+				_pos_sp_triplet.current.vz = velocity(2);
+				_pos_sp_triplet.current.yaw = _waypoint.yaw;
+				_pos_sp_triplet.current.timestamp = hrt_absolute_time();
+//				printf("Next point %f, %f, %f\n", (double) next_point(0),(double) next_point(1),(double) next_point(2));
+//				printf("Velocity %f, %f, %f\n", (double) velocity(0),(double) velocity(1),(double) velocity(2));
+
+
+			usleep(0.015e6);
+			publish_setpoint();
 		}
-		_publish_control_mode();
+
+		publish_control_mode();
+
 	}
 }
 
 void
-TailsitterPathPlanner::_publish_setpoint()
+TailsitterPathPlanner::publish_setpoint()
 {
 	if (_position_setpoint_pub != nullptr) {
 		orb_publish(ORB_ID(position_setpoint_triplet), _position_setpoint_pub, &_pos_sp_triplet);
@@ -125,7 +181,7 @@ TailsitterPathPlanner::_publish_setpoint()
 }
 
 void
-TailsitterPathPlanner::_publish_control_mode()
+TailsitterPathPlanner::publish_control_mode()
 {
 	if(_v_control_mode_pub != nullptr){
 		_control_mode.timestamp = hrt_absolute_time();
@@ -181,35 +237,41 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 				_control_mode.ignore_acceleration_force = true;
 			}
 
+			_waypoint.start_point(0) = _local_pos.x;
+			_waypoint.start_point(1) = _local_pos.y;
+			_waypoint.start_point(2) = _local_pos.z;
+			_waypoint.end_point(0) = strtof(argv[1], 0);
+			_waypoint.end_point(1) = strtof(argv[2], 0);
+			_waypoint.end_point(2) = strtof(argv[3], 0);
+			math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
+			direction.normalize();
+			_waypoint.direction = direction;
+			_waypoint.yaw = strtof(argv[4], 0);
+			math::Vector<3> velocity = direction * _params.cruise_speed;
 
+			for (int i=0; i<3; i++){
+				if (velocity(i) > _params.cruise_speed_max(i) || velocity(i) < -_params.cruise_speed_max(i)){
+					float scale = _params.cruise_speed_max(i) / velocity(i);
+					scale = scale > 0 ? scale:-scale;
+					velocity = velocity * scale;
+				}
+			}
+			_waypoint.speed = velocity.length();
+			_waypoint.velocity = velocity;
 
-			_pos_sp_triplet.previous = _pos_sp_triplet.current;
-			_pos_sp_triplet.current.valid = true;
-			_pos_sp_triplet.current.position_valid = true;
-			_pos_sp_triplet.current.velocity_valid = false;
-			_pos_sp_triplet.current.alt_valid = true;
-			_pos_sp_triplet.current.yawspeed_valid = false;
-
-			_pos_sp_triplet.current.acceleration_valid =  false;
-			_pos_sp_triplet.current.yaw_valid = true;
-			PX4_INFO("Command Pos: %s, %s, %s, %s", argv[1],
-													argv[2],
-													argv[3],
-													argv[4]);
-			_pos_sp_triplet.current.x = strtof(argv[1], 0);
-			_pos_sp_triplet.current.y = strtof(argv[2], 0);
-			_pos_sp_triplet.current.z = strtof(argv[3], 0);
-			_pos_sp_triplet.current.yaw = strtof(argv[4], 0);
 			usleep(1e6);
+			_waypoint.start_time = hrt_absolute_time();
 			_setpoint_updated = true;
 
 		}
 	}
 }
+
+
 void
 TailsitterPathPlanner::update_control_mode(int argc, char* argv[])
 {
-	_reset_control_mode();
+	reset_control_mode();
 	if(!strcmp(argv[0], "acc"))
 		_control_mode.ignore_acceleration_force = false;
 	if(!strcmp(argv[0], "pos"))
@@ -218,7 +280,7 @@ TailsitterPathPlanner::update_control_mode(int argc, char* argv[])
 
 
 void
-TailsitterPathPlanner::_reset_control_mode()
+TailsitterPathPlanner::reset_control_mode()
 {
 	_control_mode.ignore_thrust = true;
 	_control_mode.ignore_attitude = true;
@@ -227,6 +289,41 @@ TailsitterPathPlanner::_reset_control_mode()
 	_control_mode.ignore_velocity = true;
 	_control_mode.ignore_acceleration_force = true;
 	_control_mode.ignore_alt_hold = true;
+}
+void
+TailsitterPathPlanner::params_update(bool force)
+{
+	bool updated;
+		struct parameter_update_s param_upd;
+
+		orb_check(_params_sub, &updated);
+
+		if (updated) {
+			orb_copy(ORB_ID(parameter_update), _params_sub, &param_upd);
+		}
+
+		if (updated || force) {
+			float v;
+			param_get(_param_handles.z_cruise_speed, &v);
+			_params.cruise_speed_max(2) = v;
+			param_get(_param_handles.xy_cruise_speed, &v);
+			_params.cruise_speed_max(0) = v;
+			_params.cruise_speed_max(1) = v;
+			param_get(_param_handles.cruise_speed, &_params.cruise_speed);
+
+		}
+}
+
+void
+TailsitterPathPlanner::poll_subscriptions()
+{
+	bool updated;
+	orb_check(_local_pos_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(vehicle_local_position), _local_pos_sub, &_local_pos);
+	}
+
 }
 
 int ts_path_planner_main(int argc, char *argv[])
