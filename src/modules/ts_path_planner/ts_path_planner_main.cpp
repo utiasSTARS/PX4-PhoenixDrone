@@ -131,7 +131,7 @@ TailsitterPathPlanner::task_main()
 				math::Vector<3> next_point = _waypoint.start_point + _waypoint.direction * dt * _waypoint.speed;
 				math::Vector<3> velocity = _waypoint.velocity;
 
-				if((next_point - _waypoint.end_point).length()< 0.1f){
+				if((next_point - _waypoint.end_point).length()< 0.05f){
 					_setpoint_updated = false;
 					next_point = _waypoint.end_point;
 					velocity.zero();
