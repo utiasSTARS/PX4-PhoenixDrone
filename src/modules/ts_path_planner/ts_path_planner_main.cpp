@@ -145,7 +145,9 @@ TailsitterPathPlanner::task_main()
 				_pos_sp_triplet.current.type = position_setpoint_s::SETPOINT_TYPE_OFFBOARD;
 				_pos_sp_triplet.current.alt_valid = false;
 				_pos_sp_triplet.current.yawspeed_valid = false;
-
+//				velocity.zero();
+//				velocity.normalize();
+//				velocity = velocity * 0.3f;
 				_pos_sp_triplet.current.acceleration_valid =  false;
 				_pos_sp_triplet.current.yaw_valid = true;
 				_pos_sp_triplet.current.x = next_point(0);
@@ -225,8 +227,10 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 			_pos_sp_triplet.current.a_y = strtof(argv[2], 0);
 			_pos_sp_triplet.current.a_z = strtof(argv[3], 0);
 			_pos_sp_triplet.current.yaw = strtof(argv[4], 0);
-			usleep(1e6);
-			_setpoint_updated = true;
+			usleep(2e6);
+			//_setpoint_updated = true;
+			publish_setpoint();
+			//publish_setpoint();
 
 		}
 

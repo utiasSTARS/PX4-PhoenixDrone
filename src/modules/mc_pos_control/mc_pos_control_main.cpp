@@ -661,7 +661,7 @@ MulticopterPositionControl::parameters_update(bool force)
 		 * increase the maximum horizontal acceleration such that stopping
 		 * within 1 s from full speed is feasible
 		 */
-		_params.acc_hor_max = math::max(_params.vel_cruise(0), _params.acc_hor_max);
+//		_params.acc_hor_max = math::max(_params.vel_cruise(0), _params.acc_hor_max);
 		param_get(_params_handles.alt_mode, &v_i);
 		_params.alt_mode = v_i;
 
@@ -1226,6 +1226,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 
 	} else {
 		control_position(dt);
+
 	}
 }
 
@@ -1299,6 +1300,7 @@ MulticopterPositionControl::limit_acceleration(float dt)
 	acc_hor(1) = (_vel_sp(1) - _vel_sp_prev(1)) / dt;
 
 	if (acc_hor.length() > _params.acc_hor_max) {
+		warnx("%f\n", (double) _params.acc_hor_max);
 		acc_hor.normalize();
 		acc_hor *= _params.acc_hor_max;
 		math::Vector<2> vel_sp_hor_prev(_vel_sp_prev(0), _vel_sp_prev(1));
@@ -1696,6 +1698,7 @@ MulticopterPositionControl::control_position(float dt)
 	_global_vel_sp.vx = _vel_sp(0);
 	_global_vel_sp.vy = _vel_sp(1);
 	_global_vel_sp.vz = _vel_sp(2);
+
 
 	/* publish velocity setpoint */
 	if (_global_vel_sp_pub != nullptr) {

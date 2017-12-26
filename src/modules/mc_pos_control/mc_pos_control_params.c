@@ -450,13 +450,13 @@ PARAM_DEFINE_FLOAT(MPC_VELD_LP, 5.0f);
  * Maximum horizonal acceleration in velocity controlled modes
  *
  * @unit m/s/s
- * @min 2.0
+ * @min 0.0
  * @max 15.0
- * @increment 1
+ * @increment 0.01
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 5.0f);
+PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 0.1f);
 
 /**
  * Altitude control mode, note mode 1 only tested with LPE
@@ -476,11 +476,11 @@ PARAM_DEFINE_INT32(MPC_ALT_MODE, 0);
  * @unit m/s/s
  * @min 0.0
  * @max 15.0
- * @increment 0.01
+ * @increment 0.001
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_TC_X, 0.6f);
+PARAM_DEFINE_FLOAT(TS_POS_TC_X, 0.45f);
 
 /**
  * Position controller time constant Y
@@ -492,7 +492,7 @@ PARAM_DEFINE_FLOAT(TS_POS_TC_X, 0.6f);
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_TC_Y, 0.9f);
+PARAM_DEFINE_FLOAT(TS_POS_TC_Y, 1.3f);
 
 /**
  * Position controller time constant Z
@@ -512,11 +512,11 @@ PARAM_DEFINE_FLOAT(TS_POS_TC_Z, 0.2f);
  * @unit m/s/s
  * @min 0.0
  * @max 15.0
- * @increment 0.01
+ * @increment 0.001
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_DR_X, 0.6f);
+PARAM_DEFINE_FLOAT(TS_POS_DR_X, 0.3f);
 
 /**
  * Position controller damping ratios Y
@@ -528,7 +528,7 @@ PARAM_DEFINE_FLOAT(TS_POS_DR_X, 0.6f);
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_DR_Y, 0.5f);
+PARAM_DEFINE_FLOAT(TS_POS_DR_Y, 0.65f);
 
 /**
  * Position controller damping ratios Z

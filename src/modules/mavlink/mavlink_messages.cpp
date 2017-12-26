@@ -62,6 +62,7 @@
 #include <uORB/topics/battery_status.h>
 #include <uORB/topics/camera_trigger.h>
 #include <uORB/topics/cpuload.h>
+#include <uORB/topics/control_state.h>
 #include <uORB/topics/debug_key_value.h>
 #include <uORB/topics/differential_pressure.h>
 #include <uORB/topics/distance_sensor.h>
@@ -2418,7 +2419,7 @@ protected:
 							/* scale PWM out 900..2100 us to 0..1 for rotors */
 							//msg.controls[i] = (act.output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
 							msg.controls[i] = act.output[i];
-							//warnx("Controls[%d]: %f", i , (double) act.output[i]);
+//							warnx("Controls[%d]: %f", i , (double) act.output[i]);
 						} else {
 							/* scale PWM out 900..2100 us to -1..1 for other channels */
 							//msg.controls[i] = (act.output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
@@ -3853,11 +3854,13 @@ public:
 private:
 	MavlinkOrbSubscription *_att_sub;
 	MavlinkOrbSubscription *_gpos_sub;
+	MavlinkOrbSubscription *_full_states_sub;
 	uint64_t _att_time;
 	uint64_t _gpos_time;
+	uint64_t _full_states_time;
 	struct vehicle_attitude_s _att;
 	struct vehicle_global_position_s _gpos;
-
+	struct control_state_s _full_states;
 	/* do not allow top copying this class */
 	MavlinkStreamGroundTruth(MavlinkStreamGroundTruth &);
 	MavlinkStreamGroundTruth &operator = (const MavlinkStreamGroundTruth &);
@@ -3866,18 +3869,22 @@ protected:
 	explicit MavlinkStreamGroundTruth(Mavlink *mavlink) : MavlinkStream(mavlink),
 		_att_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_attitude_groundtruth))),
 		_gpos_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_global_position_groundtruth))),
+		_full_states_sub(_mavlink->add_orb_subscription(ORB_ID(full_states_groundtruth))),
 		_att_time(0),
 		_gpos_time(0),
+		_full_states_time(0),
 		_att(),
-		_gpos()
+		_gpos(),
+		_full_states()
 	{}
 
 	void send(const hrt_abstime t)
 	{
 		bool att_updated = _att_sub->update(&_att_time, &_att);
 		bool gpos_updated = _gpos_sub->update(&_gpos_time, &_gpos);
+		bool full_states_updated = _full_states_sub->update(&_full_states_time, &_full_states);
 
-		if (att_updated || gpos_updated) {
+		if (att_updated || gpos_updated || full_states_updated) {
 
 			mavlink_hil_state_quaternion_t msg = {};
 
@@ -3886,9 +3893,9 @@ protected:
 				msg.attitude_quaternion[1] = _att.q[1];
 				msg.attitude_quaternion[2] = _att.q[2];
 				msg.attitude_quaternion[3] = _att.q[3];
-				msg.rollspeed = _att.rollspeed;
-				msg.pitchspeed = _att.pitchspeed;
-				msg.yawspeed = _att.yawspeed;
+//				msg.rollspeed = _att.rollspeed;
+//				msg.pitchspeed = _att.pitchspeed;
+//				msg.yawspeed = _att.yawspeed;
 			}
 
 			if (gpos_updated) {
@@ -3900,10 +3907,14 @@ protected:
 				msg.vz = _gpos.vel_d;
 				msg.ind_airspeed = 0;
 				msg.true_airspeed = 0;
-				msg.xacc = 0;
-				msg.yacc = 0;
-				msg.zacc = 0;
 			}
+
+			if (full_states_updated){
+				msg.rollspeed = _full_states.x_acc*0.53f;
+				msg.pitchspeed = _full_states.y_acc*0.53f;
+				msg.yawspeed = _full_states.z_acc*0.53f;
+			}
+
 
 			mavlink_msg_hil_state_quaternion_send_struct(_mavlink->get_channel(), &msg);
 		}

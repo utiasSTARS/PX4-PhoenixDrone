@@ -45,6 +45,7 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/control_state.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/battery_status.h>
 #include <uORB/topics/att_pos_mocap.h>
@@ -254,6 +255,7 @@ private:
 		_gpos_pub(nullptr),
 		_lpos_pub(nullptr),
 		_att_pos_mocap_pub(nullptr),
+		_full_states_pub(nullptr),
 		_actuator_outputs_sub{},
 		_vehicle_attitude_sub(-1),
 		_manual_sub(-1),
@@ -333,6 +335,7 @@ private:
 	orb_advert_t _gpos_pub;
 	orb_advert_t _lpos_pub;
 	orb_advert_t _att_pos_mocap_pub;
+	orb_advert_t _full_states_pub;
 
 	// uORB subscription handlers
 	int _actuator_outputs_sub[1];

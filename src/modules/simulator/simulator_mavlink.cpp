@@ -506,6 +506,28 @@ void Simulator::handle_message(mavlink_message_t *msg, bool publish)
 					 ORB_PRIO_HIGH);
 		}
 
+		struct control_state_s full_states_groundtruth{};
+		{
+			full_states_groundtruth.timestamp = timestamp;
+			full_states_groundtruth.x_acc = hil_state.xacc / 1e3f;
+			full_states_groundtruth.y_acc = hil_state.yacc / 1e3f;
+			full_states_groundtruth.z_acc = hil_state.zacc / 1e3f;
+			full_states_groundtruth.x_vel = hil_state.vx / 100.0f;
+			full_states_groundtruth.y_vel = hil_state.vy / 100.0f;
+			full_states_groundtruth.z_vel = hil_state.vz / 100.0f;
+			full_states_groundtruth.x_pos = hil_lpos.x;
+			full_states_groundtruth.y_pos = hil_lpos.y;
+			full_states_groundtruth.z_pos = hil_lpos.z;
+			memcpy(&full_states_groundtruth.q[0], &hil_attitude.q[0],sizeof(hil_attitude));
+			full_states_groundtruth.roll_rate = hil_attitude.rollspeed;
+			full_states_groundtruth.pitch_rate = hil_attitude.pitchspeed;
+			full_states_groundtruth.yaw_rate = hil_attitude.yawspeed;
+
+			int full_states_groundtruth_multi;
+			orb_publish_auto(ORB_ID(full_states_groundtruth), &_full_states_pub, &full_states_groundtruth, &full_states_groundtruth_multi,
+								 ORB_PRIO_HIGH);
+		}
+
 
 
 		break;
