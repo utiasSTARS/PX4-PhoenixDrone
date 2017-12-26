@@ -57,6 +57,7 @@ set(config_module_list
 	modules/uORB
 	modules/vtol_att_control
 	modules/ts_att_control
+	modules/ts_pos_control
 	modules/ts_path_planner
 	
 
