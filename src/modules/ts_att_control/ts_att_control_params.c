@@ -174,7 +174,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_TC, 0.2f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_RATE_TC, 0.02f);
+PARAM_DEFINE_FLOAT(TS_PITCH_RATE_TC, 0.04f);
 /**
  * TS Pitch Maximum (Deg)
  *
