@@ -22,6 +22,7 @@
 #include <systemlib/px4_macros.h>
 #include "systemlib/param/param.h"
 #include <lib/mathlib/mathlib.h>
+#include <platforms/px4_workqueue.h>
 #include "ts_path_planner.h"
 
 /**
@@ -47,7 +48,8 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_local_pos_sub(-1),
 		_control_mode{},
 		_pos_sp_triplet{},
-		_local_pos{}
+		_local_pos{},
+		_work{}
 {
 	_params.cruise_speed_max.zero();
 	_params.cruise_speed = 0;
@@ -122,6 +124,7 @@ TailsitterPathPlanner::task_main()
 	reset_control_mode();
 	_params_sub = orb_subscribe(ORB_ID(parameter_update));
 	_local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
+	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, 0);
 
 	while(!_task_should_exit){
 		poll_subscriptions();
@@ -166,7 +169,7 @@ TailsitterPathPlanner::task_main()
 			publish_setpoint();
 		}
 
-		publish_control_mode();
+//		publish_control_mode();
 
 	}
 }
@@ -183,6 +186,13 @@ TailsitterPathPlanner::publish_setpoint()
 }
 
 void
+TailsitterPathPlanner::publish_control_mode_trampoline(void *arg)
+{
+	TailsitterPathPlanner *dev = reinterpret_cast<TailsitterPathPlanner *>(arg);
+	dev->publish_control_mode();
+}
+
+void
 TailsitterPathPlanner::publish_control_mode()
 {
 	if(_v_control_mode_pub != nullptr){
@@ -192,6 +202,7 @@ TailsitterPathPlanner::publish_control_mode()
 	else{
 		_v_control_mode_pub = orb_advertise(ORB_ID(offboard_control_mode), &_control_mode);
 	}
+	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, USEC2TICK(1e5));
 }
 
 void
@@ -358,7 +369,7 @@ int ts_path_planner_main(int argc, char *argv[])
 			warnx("start failed");
 			return 1;
 		}
-		warnx("Planner started");
+		PX4_INFO("Planner started");
 
 		return 0;
 	}

@@ -62,6 +62,8 @@ param set MPC_TKO_SPEED 0.8
 param set CBRK_GPSFAIL 240024
 param set MIS_TAKEOFF_ALT 1.5
 param set MPC_ACC_HOR_MAX 1
+param set MPC_TILTMAX_AIR 30
+param set MPC_THR_MAX 10
 replay tryapplyparams
 simulator start -s
 rgbledsim start
@@ -73,7 +75,7 @@ adcsim start
 gpssim start
 measairspeedsim start
 pwm_out_sim mode_pwm
-ts_att_control start
+ts_att_control start gazebo
 ts_path_planner start
 sleep 1
 sensors start
@@ -84,7 +86,7 @@ attitude_estimator_q start
 local_position_estimator start
 mc_pos_control start
 mixer load /dev/pwm_output0 ROMFS/px4fmu_common/mixers/caipirinha_vtol.main.mix
-mavlink start -u 14556 -r 2000000 -m custom -o 14540
+mavlink start -u 14556 -r 2000000 -m custom -o 14540 -v
 sdlog2 start -r 200 -e -t -a
 mavlink boot_complete
 replay trystart

@@ -1155,7 +1155,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 	/* use constant descend rate when landing, ignore altitude setpoint */
 	if (_pos_sp_triplet.current.valid
 	    && _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_LAND) {
-		_vel_sp(2) = _params.land_speed;
+		_vel_sp(2) = 0;//_params.land_speed;
 		_run_alt_control = false;
 	}
 
@@ -1300,7 +1300,7 @@ MulticopterPositionControl::limit_acceleration(float dt)
 	acc_hor(1) = (_vel_sp(1) - _vel_sp_prev(1)) / dt;
 
 	if (acc_hor.length() > _params.acc_hor_max) {
-		warnx("%f\n", (double) _params.acc_hor_max);
+//		warnx("%f\n", (double) _params.acc_hor_max);
 		acc_hor.normalize();
 		acc_hor *= _params.acc_hor_max;
 		math::Vector<2> vel_sp_hor_prev(_vel_sp_prev(0), _vel_sp_prev(1));
@@ -1893,10 +1893,12 @@ MulticopterPositionControl::control_position(float dt)
 					/* max horizontal thrust for given vertical thrust*/
 					float thrust_xy_max = -thrust_sp(2) * tanf(tilt_max);
 
+
 					if (thrust_sp_xy_len > thrust_xy_max) {
 						float k = thrust_xy_max / thrust_sp_xy_len;
 						thrust_sp(0) *= k;
 						thrust_sp(1) *= k;
+						warnx("exceed tilt angle");
 					}
 				}
 			}

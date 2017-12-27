@@ -35,6 +35,7 @@
 #include <uORB/topics/mc_att_ctrl_status.h>
 #include <uORB/topics/battery_status.h>
 #include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/ts_actuator_controls.h>
 #include <systemlib/param/param.h>
 #include <systemlib/err.h>
 #include <systemlib/perf_counter.h>
@@ -82,6 +83,7 @@ public:
 	 * @return		OK on success.
 	 */
 	int		start();
+	bool		sitl_enabled;
 
 private:
 
@@ -102,10 +104,12 @@ private:
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
 	orb_advert_t	_controller_status_pub;	/**< controller status publication */
 	orb_advert_t	_actuator_outputs_pub;	/**<actuator outputs publication */
+	orb_advert_t	_ts_actuator_controls_pub;
 	orb_id_t _rates_sp_id;	/**< pointer to correct rates setpoint uORB metadata structure */
 	orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
 
 	bool		_actuators_0_circuit_breaker_enabled;	/**< circuit breaker to suppress output */
+
 
 	struct control_state_s				_ctrl_state;		/**< control state */
 	struct vehicle_attitude_setpoint_s	_v_att_sp;			/**< vehicle attitude setpoint */
@@ -117,7 +121,8 @@ private:
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
 	struct battery_status_s				_battery_status;	/**< battery status */
-	struct actuator_outputs_s			_actuator_outputs;  /**< actuator outputs */
+	struct actuator_outputs_s			_actuator_outputs;  /**< actuator outputs(posix) */
+	struct ts_actuator_controls_s		_ts_actuator_controls; /**< actuator outputs(nuttx)*/
 
 	TailsitterRateControl*	_ts_rate_control;
 	union {
@@ -305,6 +310,7 @@ TailsitterAttitudeControl	*g_control;
 
 TailsitterAttitudeControl::TailsitterAttitudeControl() :
 
+	sitl_enabled(false),
 	_task_should_exit(false),
 	_control_task(-1),
 
@@ -321,11 +327,11 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_actuators_0_pub(nullptr),
 	_controller_status_pub(nullptr),
 	_actuator_outputs_pub(nullptr),
+	_ts_actuator_controls_pub(nullptr),
 	_rates_sp_id(0),
 	_actuators_id(0),
 
 	_actuators_0_circuit_breaker_enabled(false),
-
 	_ctrl_state{},
 	_v_att_sp{},
 	_v_rates_sp{},
@@ -1019,22 +1025,41 @@ TailsitterAttitudeControl::task_main()
 
 				_ts_rate_control->mix(_actuators.control[3], momentum_ref, outputs);
 			}
-			_actuator_outputs.noutputs = 6;
-			_actuator_outputs.timestamp = hrt_absolute_time();
-			_actuator_outputs.output[0] = (PX4_ISFINITE(outputs[0])) ? outputs[0] : 0.0f;
-			_actuator_outputs.output[1] = (PX4_ISFINITE(outputs[1])) ? outputs[1] : 0.0f;
-			_actuator_outputs.output[4] = (PX4_ISFINITE(outputs[2])) ? outputs[2] : 0.0f;
-			_actuator_outputs.output[5] = (PX4_ISFINITE(outputs[3])) ? outputs[3] : 0.0f;
 
-//			for (int i = 0; i< 4; i++){
-//				warnx("outputs %d: %f\n", i, (double) outputs[i]);
-//			}
-			if (_actuator_outputs_pub != nullptr) {
-				orb_publish(ORB_ID(ts_actuator_outputs_virtual), _actuator_outputs_pub, &_actuator_outputs);
+			if(sitl_enabled){
+				_actuator_outputs.noutputs = 6;
+				_actuator_outputs.timestamp = hrt_absolute_time();
+				_actuator_outputs.output[0] = (PX4_ISFINITE(outputs[0])) ? outputs[0] : 0.0f;
+				_actuator_outputs.output[1] = (PX4_ISFINITE(outputs[1])) ? outputs[1] : 0.0f;
+				_actuator_outputs.output[4] = (PX4_ISFINITE(outputs[2])) ? outputs[2] : 0.0f;
+				_actuator_outputs.output[5] = (PX4_ISFINITE(outputs[3])) ? outputs[3] : 0.0f;
 
-			} else {
-				_actuator_outputs_pub = orb_advertise(ORB_ID(ts_actuator_outputs_virtual), &_actuator_outputs);
-			}
+	//			for (int i = 0; i< 4; i++){
+	//				warnx("outputs %d: %f\n", i, (double) outputs[i]);
+	//			}
+				if (_actuator_outputs_pub != nullptr) {
+					orb_publish(ORB_ID(ts_actuator_outputs_virtual), _actuator_outputs_pub, &_actuator_outputs);
+
+				} else {
+					_actuator_outputs_pub = orb_advertise(ORB_ID(ts_actuator_outputs_virtual), &_actuator_outputs);
+				}
+			}else{
+				_ts_actuator_controls.timestamp = hrt_absolute_time();
+				_ts_actuator_controls.control[0] = (PX4_ISFINITE(outputs[0])) ? outputs[0] * 800.f : 0.0f;
+				_ts_actuator_controls.control[1] = (PX4_ISFINITE(outputs[1])) ? outputs[1] * 800.f : 0.0f;
+				_ts_actuator_controls.control[2] = (PX4_ISFINITE(outputs[3])) ? outputs[3] / 3.14f * 180.0f : 0.0f;
+				_ts_actuator_controls.control[3] = (PX4_ISFINITE(outputs[2])) ? outputs[2] / 3.14f * 180.0f : 0.0f;
+
+				if (_ts_actuator_controls_pub != nullptr){
+					orb_publish(ORB_ID(ts_actuator_controls_0), _ts_actuator_controls_pub, &_ts_actuator_controls);
+				}
+				else{
+					_ts_actuator_controls_pub =orb_advertise(ORB_ID(ts_actuator_controls_0), &_ts_actuator_controls);
+				}
+		}
+
+
+
 
 
 			if (_v_control_mode.flag_control_termination_enabled) {
@@ -1138,20 +1163,25 @@ int ts_att_control_main(int argc, char *argv[])
 			warnx("already running");
 			return 1;
 		}
-		warnx("Creating Pointer\n");
 		ts_att_control::g_control = new TailsitterAttitudeControl;
 
 		if (ts_att_control::g_control == nullptr) {
 			warnx("alloc failed");
 			return 1;
 		}
-		warnx("Starting ts att control\n");
 
 		if (OK != ts_att_control::g_control->start()) {
 			delete ts_att_control::g_control;
 			ts_att_control::g_control = nullptr;
 			warnx("start failed");
 			return 1;
+		}
+
+		if(argc == 3 && !strcmp(argv[2], "gazebo")){
+			ts_att_control::g_control->sitl_enabled = true;
+			PX4_INFO("sitl enabled");
+		}else{
+			PX4_INFO("sitl disabled");
 		}
 
 		return 0;
