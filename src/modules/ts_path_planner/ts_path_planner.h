@@ -16,6 +16,7 @@
 #include <uORB/topics/position_setpoint.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/parameter_update.h>
+#include <platforms/px4_workqueue.h>
 
 
 class __EXPORT TailsitterPathPlanner{
@@ -42,6 +43,7 @@ private:
 	struct offboard_control_mode_s		_control_mode;
 	struct position_setpoint_triplet_s 	_pos_sp_triplet;
 	struct vehicle_local_position_s		_local_pos;
+	struct work_s						_work;
 
 	struct{
 		math::Vector<3>	cruise_speed_max;
@@ -68,6 +70,7 @@ private:
 	void task_main();
 	void publish_setpoint();
 	void publish_control_mode();
+	static void publish_control_mode_trampoline(void *arg);
 	void reset_control_mode();
 	void params_update(bool force_update);
 	void poll_subscriptions();
