@@ -243,9 +243,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 		handle_message_system_time(msg);
 		break;
 
-	case MAVLINK_MSG_ID_TIMESYNC:
+	/**case MAVLINK_MSG_ID_TIMESYNC:
 		handle_message_timesync(msg);
-		break;
+		break;**/
 
 	case MAVLINK_MSG_ID_DISTANCE_SENSOR:
 		handle_message_distance_sensor(msg);
@@ -764,7 +764,7 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	// Use the component ID to identify the mocap system
 	att_pos_mocap.id = msg->compid;
 
-	att_pos_mocap.timestamp = sync_stamp(mocap.time_usec);
+	att_pos_mocap.timestamp = hrt_absolute_time();//sync_stamp(mocap.time_usec);
 	att_pos_mocap.timestamp_received = hrt_absolute_time();
 
 	att_pos_mocap.q[0] = mocap.q[0];
