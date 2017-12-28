@@ -63,8 +63,8 @@
 
 #define TSFMU_DEV_PATH "/dev/tsfmu"
 
-#define PWM_SERVO_MIN 900
-#define PWM_SERVO_MAX 2100
+#define PWM_SERVO_MIN 960
+#define PWM_SERVO_MAX 2040
 #define SCHEDULE_INTERVAL	2000	/**< The schedule interval in usec (500 Hz) */
 #define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 #define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)

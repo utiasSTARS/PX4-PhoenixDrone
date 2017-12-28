@@ -128,8 +128,8 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	outputs[3] = 0;
 
 	//Elevon deflections are linear, just normalize between -1, 1
-	outputs[4] = normalize(elv_left , _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
-	outputs[5] = normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
+	outputs[4] = -normalize(elv_left , _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
+	outputs[5] = normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f)+0.12f;
 
 
 	return 6;
