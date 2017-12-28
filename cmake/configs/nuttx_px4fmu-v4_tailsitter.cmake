@@ -88,7 +88,7 @@ set(config_module_list
 	modules/unit_test
 	modules/uORB/uORB_tests
 	systemcmds/tests
-	systemcmds/ts_loadcell_test
+	#systemcmds/ts_loadcell_test
 
 	#
 	# General system control
@@ -134,7 +134,7 @@ set(config_module_list
 
     #
     # Custom mdules
-    modules/radsmeter
+    #modules/radsmeter
 
 	#
 	# Libraries

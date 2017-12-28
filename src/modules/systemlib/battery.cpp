@@ -115,7 +115,7 @@ Battery::filterVoltage(float voltage_v)
 	}
 
 	// TODO: inspect that filter performance
-	const float filtered_next = _voltage_filtered_v * 0.99f + voltage_v * 0.01f;
+	const float filtered_next = _voltage_filtered_v * 0.9f + voltage_v * 0.1f;
 
 	if (PX4_ISFINITE(filtered_next)) {
 		_voltage_filtered_v = filtered_next;

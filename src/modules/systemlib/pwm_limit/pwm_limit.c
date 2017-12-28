@@ -118,15 +118,21 @@ void pwm_limit_calc(const bool armed, const bool pre_armed, const unsigned num_c
 
 	unsigned local_limit_state = limit->state;
 
-	if (pre_armed) {
-		local_limit_state = PWM_LIMIT_STATE_ON;
-	}
+//	if (pre_armed) {
+//		local_limit_state = PWM_LIMIT_STATE_ON;
+//	}
 
 	unsigned progress;
 
 	/* then set effective_pwm based on state */
 	switch (local_limit_state) {
 	case PWM_LIMIT_STATE_OFF:
+		for (unsigned i = 0; i < num_channels; i++) {
+			effective_pwm[i] = 0;
+		}
+
+		break;
+
 	case PWM_LIMIT_STATE_INIT:
 		for (unsigned i = 0; i < num_channels; i++) {
 			effective_pwm[i] = disarmed_pwm[i];

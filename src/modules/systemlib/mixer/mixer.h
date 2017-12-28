@@ -130,10 +130,15 @@
 
 #include <px4_config.h>
 #include "drivers/drv_mixer.h"
+#include <drivers/drv_hrt.h>
+#include <math.h>
+#include <lib/mathlib/mathlib.h>
+#include <semaphore.h>
 
 #include <uORB/topics/multirotor_motor_limits.h>
 
 #include "mixer_load.h"
+
 
 /**
  * Abstract class defining a mixer mixing zero or more inputs to
@@ -696,11 +701,17 @@ struct mixer_ts_s {
 	float				rads_max; /*Maximum motor speed which can be tracked*/
 	float				deg_min; /*Minimum Elevon Deflection in deg*/
 	float				deg_max; /*Maximum Elevon Deflection in deg*/
-	float 				k_w2; /*PWM = k_w2*(w^2) + k_w * w + k_c */
-	float 				k_w;
-	float 				k_c;
+	float 				k_w2[2]; /*PWM = k_w2*(w^2) + k_w * w + k_c */
+	float 				k_w[2];
+	float 				k_c[2];
 	//TODO: Kp, Ki for rpm control and K, I term max PWM Value to be added
-
+	float				k_p;
+	float				k_i;
+	float				int_term_lim;
+	float				p_term_lim;
+	float				integral_lim;
+	int					control_interval; /*control intervals(us) for sanity check*/
+	float				calib_volt; /*Voltage across motor during calibration*/
 };
 
 /**
@@ -775,6 +786,14 @@ public:
 				const char *buf,
 				unsigned &buflen);
 	void	set_max_delta_out_once(float delta_out_max);
+	void	set_curr_omega(float* omegas);
+
+	void	init_rotor_controller();
+	void	set_curr_omega_valid(bool valid);
+	void	update_mixer_info(mixer_ts_s *mixer_info);
+	void    clear_integral(int motor_index);
+
+
 	virtual unsigned		mix(float *outputs, unsigned space, uint16_t *status_reg);
 	virtual uint16_t		get_saturation_status(void) { return 0; }
 	virtual void			groups_required(uint32_t &groups);
@@ -784,8 +803,18 @@ public:
 	}
 private:
 	mixer_ts_s				_mixer_info;
+	mixer_ts_s				_prev_mixer_info;
 	float					_delta_out_max;
+	bool					_rotor_controller_init;
+	hrt_abstime				_last_control_timestamp;
+	math::Vector<2>			_pi_integrals;
+	math::Vector<2>			_curr_omegas;
+	bool					_curr_omegas_valid;
+	sem_t					_sem_mixer;
+	float					_prev_outputs[2];
 
+	void 					_rotor_control(float dt, float* omega_desired, float** pwm_outputs);
+	void					_report_mixer_info(void);
 };
 
 #endif
