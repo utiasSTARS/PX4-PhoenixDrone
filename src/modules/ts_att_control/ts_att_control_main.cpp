@@ -1047,8 +1047,8 @@ TailsitterAttitudeControl::task_main()
 				_ts_actuator_controls.timestamp = hrt_absolute_time();
 				_ts_actuator_controls.control[0] = (PX4_ISFINITE(outputs[0])) ? outputs[0] * 800.f : 0.0f;
 				_ts_actuator_controls.control[1] = (PX4_ISFINITE(outputs[1])) ? outputs[1] * 800.f : 0.0f;
-				_ts_actuator_controls.control[2] = (PX4_ISFINITE(outputs[3])) ? outputs[3] / 3.14f * 180.0f : 0.0f;
-				_ts_actuator_controls.control[3] = (PX4_ISFINITE(outputs[2])) ? outputs[2] / 3.14f * 180.0f : 0.0f;
+				_ts_actuator_controls.control[2] = (PX4_ISFINITE(outputs[3])) ? outputs[3] : 0.0f;
+				_ts_actuator_controls.control[3] = (PX4_ISFINITE(outputs[2])) ? outputs[2] : 0.0f;
 
 				if (_ts_actuator_controls_pub != nullptr){
 					orb_publish(ORB_ID(ts_actuator_controls_0), _ts_actuator_controls_pub, &_ts_actuator_controls);
