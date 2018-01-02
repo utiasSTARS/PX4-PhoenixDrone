@@ -2165,7 +2165,8 @@ Mavlink::task_main(int argc, char *argv[])
 		//configure_stream("CAMERA_TRIGGER", 500.0f);
 		//configure_stream("MISSION_ITEM", 50.0f);
 		configure_stream("ATT_POS_MOCAP", 25.f);
-		configure_stream("ACTUATOR_CONTROL_TARGET0", 25.0f);
+		//configure_stream("ACTUATOR_CONTROL_TARGET0", 25.0f);
+		configure_stream("ACTUATOR_CONTROL_TARGET1", 25.0f);
 		configure_stream("MANUAL_CONTROL", 15.0f);
 		configure_stream("ESC_RADS", 25.0f);
 		break;

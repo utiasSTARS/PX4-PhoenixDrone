@@ -93,6 +93,7 @@
 #include <uORB/topics/mount_orientation.h>
 #include <uORB/topics/collision_report.h>
 #include <uORB/topics/esc_rads.h>
+#include <uORB/topics/ts_actuator_controls.h>
 #include <uORB/uORB.h>
 
 
@@ -2104,7 +2105,7 @@ protected:
 			break;
 
 		case 1:
-			_att_ctrl_sub = _mavlink->add_orb_subscription(ORB_ID(actuator_controls_1));
+			_att_ctrl_sub = _mavlink->add_orb_subscription(ORB_ID(ts_actuator_controls_0));
 			break;
 
 		case 2:
