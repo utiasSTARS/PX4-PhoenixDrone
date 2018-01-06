@@ -261,7 +261,7 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 			math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
 			direction.normalize();
 			_waypoint.direction = direction;
-			_waypoint.yaw = strtof(argv[4], 0);
+			_waypoint.yaw = strtof(argv[4], 0) / 180.f * 3.14f;
 			math::Vector<3> velocity = direction * _params.cruise_speed;
 
 			for (int i=0; i<3; i++){

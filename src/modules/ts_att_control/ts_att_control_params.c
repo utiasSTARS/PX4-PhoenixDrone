@@ -17,7 +17,7 @@
  * @group Tailsitter Attitude Control
  */
 
-PARAM_DEFINE_FLOAT(TS_ROLL_P, 3.f);
+PARAM_DEFINE_FLOAT(TS_PITCH_P, 3.f);
 /**
  * TS Roll I Gain
  *
@@ -29,7 +29,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_P, 3.f);
  * @increment 0.05
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_I, 0f);
+PARAM_DEFINE_FLOAT(TS_PITCH_I, 0f);
 /**
  * TS Roll D Gain
  *
@@ -41,7 +41,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_I, 0f);
  * @increment 0.05
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_D, 0f);
+PARAM_DEFINE_FLOAT(TS_PITCH_D, 0f);
 /**
  * TS Roll Integral Limit
  *
@@ -53,7 +53,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_D, 0f);
  * @increment 0.05
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_INT_LIM, 5000f);
+PARAM_DEFINE_FLOAT(TS_PITCH_INT_LIM, 5000f);
 /**
  * TS Roll Time Constant
  *
@@ -65,7 +65,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_INT_LIM, 5000f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_TC, 0.2f);
+PARAM_DEFINE_FLOAT(TS_PITCH_TC, 0.2f);
 /**
  * TS Roll Rate Time Constant
  *
@@ -77,7 +77,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_TC, 0.2f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_RATE_TC, 0.06f);
+PARAM_DEFINE_FLOAT(TS_PITCH_RATE_TC, 0.06f);
 /**
  * TS Roll Maximum (Deg)
  *
@@ -89,7 +89,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_RATE_TC, 0.06f);
  * @increment 0.5
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_MAX, 60.f);
+PARAM_DEFINE_FLOAT(TS_PITCH_MAX, 60.f);
 /**
  * TS Roll Rate Maximum (Rads)
  *
@@ -101,7 +101,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_MAX, 60.f);
  * @increment 0.5
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_RATE_MAX, 100.f);
+PARAM_DEFINE_FLOAT(TS_PITCH_RATE_MX, 100.f);
 
 /**
  * TS Pitch P Gain
@@ -114,7 +114,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_RATE_MAX, 100.f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_P, 8.f);
+PARAM_DEFINE_FLOAT(TS_ROLL_P, 8.f);
 /**
  * TS Pitch I Gain
  *
@@ -126,7 +126,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_P, 8.f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_I, 0f);
+PARAM_DEFINE_FLOAT(TS_ROLL_I, 0f);
 /**
  * TS Pitch D Gain
  *
@@ -138,7 +138,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_I, 0f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_D, 0f);
+PARAM_DEFINE_FLOAT(TS_ROLL_D, 0f);
 /**
  * TS Pitch Integral Limit
  *
@@ -150,7 +150,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_D, 0f);
  * @increment 0.5
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_INT_LIM, 5000f);
+PARAM_DEFINE_FLOAT(TS_ROLL_INT_LIM, 5000f);
 /**
  * TS Pitch Time Constant
  *
@@ -162,7 +162,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_INT_LIM, 5000f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_TC, 0.2f);
+PARAM_DEFINE_FLOAT(TS_ROLL_TC, 0.2f);
 /**
  * TS Pitch Rate Time Constant
  *
@@ -174,7 +174,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_TC, 0.2f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_RATE_TC, 0.04f);
+PARAM_DEFINE_FLOAT(TS_ROLL_RATE_TC, 0.04f);
 /**
  * TS Pitch Maximum (Deg)
  *
@@ -186,7 +186,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_RATE_TC, 0.04f);
  * @increment 0.5
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_MAX, 60.f);
+PARAM_DEFINE_FLOAT(TS_ROLL_MAX, 60.f);
 /**
  * TS Pitch Rate Maximum (Rads)
  *
@@ -198,7 +198,7 @@ PARAM_DEFINE_FLOAT(TS_PITCH_MAX, 60.f);
  * @increment 0.1
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_PITCH_RATE_MX, 40.f);
+PARAM_DEFINE_FLOAT(TS_ROLL_RATE_MAX, 40.f);
 /**
  * TS Yaw P Gain
  *
@@ -294,7 +294,7 @@ PARAM_DEFINE_FLOAT(TS_YAW_MAX, 60.f);
  * @increment 0.1
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_YAW_RATE_MAX, 40.f);
+PARAM_DEFINE_FLOAT(TS_YAW_RATE_MAX, 0.4f);
 /**
  * TS Moment of Inertia xx
  *
@@ -306,7 +306,7 @@ PARAM_DEFINE_FLOAT(TS_YAW_RATE_MAX, 40.f);
  * @increment 0.0000001
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_J_XX, 0.0458929f);
+PARAM_DEFINE_FLOAT(TS_J_XX, 0.147563f);
 /**
  * TS Moment of Inertia yy
  *
@@ -318,7 +318,7 @@ PARAM_DEFINE_FLOAT(TS_J_XX, 0.0458929f);
  * @increment 0.0000001
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_J_YY, 0.147563f);
+PARAM_DEFINE_FLOAT(TS_J_YY, 0.0458929f);
 /**
  * TS Moment of Inertia zz
  *

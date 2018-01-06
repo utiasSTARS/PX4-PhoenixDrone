@@ -1018,8 +1018,8 @@ TailsitterAttitudeControl::task_main()
 				math::Vector<3> momentum_ref;
 				momentum_ref.zero();
 
-				momentum_ref(0) = _actuators.control[1];
-				momentum_ref(1) = -_actuators.control[0];
+				momentum_ref(0) = _actuators.control[0];
+				momentum_ref(1) = _actuators.control[1];
 				momentum_ref(2) = _actuators.control[2];
 
 
