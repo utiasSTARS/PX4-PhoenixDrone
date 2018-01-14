@@ -57,6 +57,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/safety.h>
 #include <uORB/topics/battery_status.h>
+#include <uORB/topics/debug_key_value.h>
 
 
 #include <systemlib/circuit_breaker.h>
@@ -154,6 +155,9 @@ private:
 	orb_advert_t	_outputs_pub;
 	unsigned	_num_outputs;
 	int		_class_instance;
+
+	orb_advert_t 	_debug_pub;
+	struct debug_key_value_s _dbg_tupple;
 
 	struct esc_rads_s  _esc_rads_msg;
 	battery_status_s   _batt_status_msg;
@@ -273,6 +277,7 @@ private:
 	void 		ts_subscribe();
 	int		set_pwm_rate(unsigned rate_map, unsigned default_rate, unsigned alt_rate);
 	int		pwm_ioctl(file *filp, int cmd, unsigned long arg);
+	void 		publish_debug_tupple(int8_t *key, float value);
 	void		publish_pwm_outputs(uint16_t *values, size_t numvalues);
 	void		update_pwm_out_state(bool on);
 	void		pwm_output_set(unsigned i, unsigned value);
@@ -334,6 +339,8 @@ TSFMU::TSFMU() :
 	_outputs_pub(nullptr),
 	_num_outputs(0),
 	_class_instance(0),
+	_debug_pub(nullptr),
+	_dbg_tupple{},
 	_esc_rads_msg{},
 	_batt_status_msg{},
 	_initialized(false),
@@ -748,7 +755,20 @@ TSFMU::subscribe()
 }
 
 
+void
+TSFMU::publish_debug_tupple(int8_t *key, float value)
+{
+	memcpy(_dbg_tupple.key , key, 10);
+	_dbg_tupple.value = value;
+	value = isnan(value)?-1:value;
 
+	if (_debug_pub == nullptr) {
+		_debug_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
+
+	} else {
+		orb_publish(ORB_ID(debug_key_value), _debug_pub, &_dbg_tupple);
+	}
+}
 
 void
 TSFMU::publish_pwm_outputs(uint16_t *values, size_t numvalues)
@@ -1637,6 +1657,8 @@ TSFMU::cycle()
 				// outputs are voltage
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
+				publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
+
 				// change output to pwm scaled to (-1, 1)
 				for(unsigned int i=0; i<2; i++){
 					outputs[i] = (outputs[i] / _curr_batt_volt) * (1000000.f / _pwm_alt_rate);
@@ -1645,6 +1667,7 @@ TSFMU::cycle()
 				}
 
 				memcpy(_outputs, outputs, sizeof(outputs));
+				publish_debug_tupple((int8_t*) "ts_out2", _outputs[0]);
 
 			}
 			else{

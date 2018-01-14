@@ -480,7 +480,7 @@ PARAM_DEFINE_INT32(MPC_ALT_MODE, 0);
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_TC_X, 0.45f);
+PARAM_DEFINE_FLOAT(TS_POS_TC_X, 1.f);
 
 /**
  * Position controller time constant Y
@@ -516,7 +516,7 @@ PARAM_DEFINE_FLOAT(TS_POS_TC_Z, 0.2f);
  * @decimal 2
  * @group Tailsitter Position Control
  */
-PARAM_DEFINE_FLOAT(TS_POS_DR_X, 0.45f);
+PARAM_DEFINE_FLOAT(TS_POS_DR_X, 0.6f);
 
 /**
  * Position controller damping ratios Y
