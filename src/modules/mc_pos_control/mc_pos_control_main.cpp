@@ -76,6 +76,7 @@
 #include <uORB/topics/vehicle_global_velocity_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/debug_key_value.h>
 
 #include <float.h>
 #include <systemlib/mavlink_log.h>
@@ -143,7 +144,7 @@ private:
 	orb_advert_t	_att_sp_pub;			/**< attitude setpoint publication */
 	orb_advert_t	_local_pos_sp_pub;		/**< vehicle local position setpoint publication */
 	orb_advert_t	_global_vel_sp_pub;		/**< vehicle global velocity setpoint publication */
-
+	orb_advert_t	_debug_outputs_pub;
 	orb_id_t _attitude_setpoint_id;
 
 	struct vehicle_status_s 			_vehicle_status; 	/**< vehicle status */
@@ -157,7 +158,7 @@ private:
 	struct position_setpoint_triplet_s		_pos_sp_triplet;	/**< vehicle global position setpoint triplet */
 	struct vehicle_local_position_setpoint_s	_local_pos_sp;		/**< vehicle local position setpoint */
 	struct vehicle_global_velocity_setpoint_s	_global_vel_sp;		/**< vehicle global velocity setpoint */
-
+	struct debug_key_value_s			_dbg_tupple;
 	control::BlockParamFloat _manual_thr_min;
 	control::BlockParamFloat _manual_thr_max;
 
@@ -316,6 +317,7 @@ private:
 
 	static float	scale_control(float ctl, float end, float dz, float dy);
 	static float    throttle_curve(float ctl, float ctr);
+	void		publish_debug_outputs(int8_t *key, float value);
 
 	/**
 	 * Update reference for local position projection
@@ -415,6 +417,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_att_sp_pub(nullptr),
 	_local_pos_sp_pub(nullptr),
 	_global_vel_sp_pub(nullptr),
+	_debug_outputs_pub(nullptr),
 	_attitude_setpoint_id(0),
 	_vehicle_status{},
 	_vehicle_land_detected{},
@@ -852,6 +855,21 @@ MulticopterPositionControl::throttle_curve(float ctl, float ctr)
 
 	} else {
 		return ctr + 2 * (ctl - 0.5f) * (1.0f - ctr);
+	}
+}
+
+void
+MulticopterPositionControl::publish_debug_outputs(int8_t *key, float value)
+{
+	memcpy(_dbg_tupple.key , key, 10);
+	_dbg_tupple.value = value;
+	value = isnan(value)?-1:value;
+
+	if (_debug_outputs_pub == nullptr) {
+		_debug_outputs_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
+
+	} else {
+		orb_publish(ORB_ID(debug_key_value), _debug_outputs_pub, &_dbg_tupple);
 	}
 }
 
@@ -1634,6 +1652,7 @@ MulticopterPositionControl::do_control(float dt)
 
 	} else {
 		control_non_manual(dt);
+
 	}
 
 }

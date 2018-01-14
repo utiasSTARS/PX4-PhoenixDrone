@@ -36,6 +36,7 @@
 #include <uORB/topics/battery_status.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/ts_actuator_controls.h>
+#include <uORB/topics/debug_key_value.h>
 #include <systemlib/param/param.h>
 #include <systemlib/err.h>
 #include <systemlib/perf_counter.h>
@@ -105,6 +106,7 @@ private:
 	orb_advert_t	_controller_status_pub;	/**< controller status publication */
 	orb_advert_t	_actuator_outputs_pub;	/**<actuator outputs publication */
 	orb_advert_t	_ts_actuator_controls_pub;
+	orb_advert_t	_debug_outputs_pub;		/**<debug outputs publicationn */
 	orb_id_t _rates_sp_id;	/**< pointer to correct rates setpoint uORB metadata structure */
 	orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
 
@@ -123,6 +125,7 @@ private:
 	struct battery_status_s				_battery_status;	/**< battery status */
 	struct actuator_outputs_s			_actuator_outputs;  /**< actuator outputs(posix) */
 	struct ts_actuator_controls_s		_ts_actuator_controls; /**< actuator outputs(nuttx)*/
+	struct debug_key_value_s			_dbg_tupple;		/**< debug tupple */
 
 	TailsitterRateControl*	_ts_rate_control;
 	union {
@@ -291,6 +294,8 @@ private:
 	 */
 	void		battery_status_poll();
 
+	void 		publish_debug_tupple(int8_t *key, float value);
+
 	/**
 	 * Shim for calling task_main from task_create.
 	 */
@@ -328,6 +333,7 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_controller_status_pub(nullptr),
 	_actuator_outputs_pub(nullptr),
 	_ts_actuator_controls_pub(nullptr),
+	_debug_outputs_pub(nullptr),
 	_rates_sp_id(0),
 	_actuators_id(0),
 
@@ -638,6 +644,22 @@ TailsitterAttitudeControl::battery_status_poll()
 		orb_copy(ORB_ID(battery_status), _battery_status_sub, &_battery_status);
 	}
 }
+
+void
+TailsitterAttitudeControl::publish_debug_tupple(int8_t *key, float value)
+{
+	memcpy(_dbg_tupple.key , key, 10);
+	_dbg_tupple.value = value;
+	value = isnan(value)?-1:value;
+
+	if (_debug_outputs_pub == nullptr) {
+		_debug_outputs_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
+
+	} else {
+		orb_publish(ORB_ID(debug_key_value), _debug_outputs_pub, &_dbg_tupple);
+	}
+}
+
 
 /**
  * Attitude controller.
