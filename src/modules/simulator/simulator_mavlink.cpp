@@ -45,6 +45,7 @@
 #include <pthread.h>
 #include <conversion/rotation.h>
 #include <mathlib/mathlib.h>
+#include <random>
 
 extern "C" __EXPORT hrt_abstime hrt_reset(void);
 
@@ -57,6 +58,7 @@ extern "C" __EXPORT hrt_abstime hrt_reset(void);
 static const uint8_t mavlink_message_lengths[256] = MAVLINK_MESSAGE_LENGTHS;
 static const uint8_t mavlink_message_crcs[256] = MAVLINK_MESSAGE_CRCS;
 static const float mg2ms2 = CONSTANTS_ONE_G / 1000.0f;
+static std::default_random_engine generator;
 
 #ifdef ENABLE_UART_RC_INPUT
 #ifndef B460800
@@ -302,9 +304,14 @@ void Simulator::handle_message(mavlink_message_t *msg, bool publish)
 					att_pos_mocap.q[2] = mocap.q[2];
 					att_pos_mocap.q[3] = mocap.q[3];
 
-					att_pos_mocap.x = mocap.x;
-					att_pos_mocap.y = mocap.y;
-					att_pos_mocap.z = mocap.z;
+
+					std::normal_distribution<double> gauss(0.0,0.001);
+
+					att_pos_mocap.x = mocap.x + (float) gauss(generator);
+					att_pos_mocap.y = mocap.y + (float) gauss(generator);
+					att_pos_mocap.z = mocap.z + (float) gauss(generator);
+
+
 
 					if (_att_pos_mocap_pub == nullptr) {
 						_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
