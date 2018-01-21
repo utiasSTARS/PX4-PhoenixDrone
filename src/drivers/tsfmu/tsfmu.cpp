@@ -759,8 +759,7 @@ void
 TSFMU::publish_debug_tupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
-	_dbg_tupple.value = value;
-	value = isnan(value)?-1:value;
+	_dbg_tupple.value = isnan(value)?-1.9950830f:value;
 
 	if (_debug_pub == nullptr) {
 		_debug_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
@@ -1657,7 +1656,7 @@ TSFMU::cycle()
 				// outputs are voltage
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
-				publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
+				//publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
 
 				// change output to pwm scaled to (-1, 1)
 				for(unsigned int i=0; i<2; i++){
@@ -1667,7 +1666,7 @@ TSFMU::cycle()
 				}
 
 				memcpy(_outputs, outputs, sizeof(outputs));
-				publish_debug_tupple((int8_t*) "ts_out2", _outputs[0]);
+				//publish_debug_tupple((int8_t*) "ts_out2", _outputs[0]);
 
 			}
 			else{
