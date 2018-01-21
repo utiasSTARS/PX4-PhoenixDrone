@@ -29,6 +29,7 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/ekf2_innovations.h>
+#include <uORB/topics/debug_key_value.h>
 
 using namespace matrix;
 using namespace control;
@@ -204,7 +205,7 @@ private:
 	void visionCheckTimeout();
 
 	// mocap
-	int  mocapMeasure(Vector<float, n_y_mocap> &y);
+	int  mocapMeasure(Vector<float, n_y_mocap> &y, Vector<float, n_y_mocap> &v);
 	void mocapCorrect();
 	void mocapInit();
 	void mocapCheckTimeout();
@@ -227,6 +228,7 @@ private:
 	void publishLocalPos();
 	void publishGlobalPos();
 	void publishEstimatorStatus();
+	void publishDebugTupple(int8_t *key, float value);
 
 	// attributes
 	// ----------------------------
@@ -371,6 +373,16 @@ private:
 	uint8_t _sensorTimeout;
 	uint8_t _sensorFault;
 	uint8_t _estimatorInitialized;
+
+	// mocap
+	struct mocap_data {
+		Vector<float, 3> position;
+		uint64_t timestamp;
+	} _mocap_old;
+
+	//debug
+	orb_advert_t 	_debug_pub;
+	struct debug_key_value_s _dbg_tupple;
 
 	// state space
 	Vector<float, n_x>  _x; // state vector

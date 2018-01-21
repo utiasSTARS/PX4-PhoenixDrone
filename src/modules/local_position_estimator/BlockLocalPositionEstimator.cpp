@@ -149,6 +149,13 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_sensorFault(0),
 	_estimatorInitialized(0),
 
+	//mocap
+	_mocap_old{},
+
+	//debug
+	_debug_pub(nullptr),
+	_dbg_tupple{},
+
 	// kf matrices
 	_x(), _u(), _P(), _R_att(), _eul()
 {
@@ -697,6 +704,19 @@ void BlockLocalPositionEstimator::publishGlobalPos()
 	}
 }
 
+void BlockLocalPositionEstimator::publishDebugTupple(int8_t *key, float value)
+{
+	memcpy(_dbg_tupple.key , key, 10);
+	_dbg_tupple.value = isnan(value)?-1.9950830f:value;
+
+	if (_debug_pub == nullptr) {
+		_debug_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
+
+	} else {
+		orb_publish(ORB_ID(debug_key_value), _debug_pub, &_dbg_tupple);
+	}
+}
+
 void BlockLocalPositionEstimator::initP()
 {
 	_P.setZero();
@@ -728,9 +748,9 @@ void BlockLocalPositionEstimator::initSS()
 
 	// input matrix
 	_B.setZero();
-	_B(X_vx, U_ax) = 1;
-	_B(X_vy, U_ay) = 1;
-	_B(X_vz, U_az) = 1;
+	//_B(X_vx, U_ax) = 1;
+	//_B(X_vy, U_ay) = 1;
+	//_B(X_vz, U_az) = 1;
 
 	// update components that depend on current state
 	updateSSStates();
