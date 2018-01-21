@@ -49,7 +49,8 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_control_mode{},
 		_pos_sp_triplet{},
 		_local_pos{},
-		_work{}
+		_work{},
+		_looptimer(2e4)
 {
 	_params.cruise_speed_max.zero();
 	_params.cruise_speed = 0;
@@ -127,6 +128,7 @@ TailsitterPathPlanner::task_main()
 	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, 0);
 
 	while(!_task_should_exit){
+		_looptimer.wait();
 		poll_subscriptions();
 		if (_setpoint_updated){
 
@@ -165,7 +167,6 @@ TailsitterPathPlanner::task_main()
 //				printf("Velocity %f, %f, %f\n", (double) velocity(0),(double) velocity(1),(double) velocity(2));
 
 
-			usleep(0.015e6);
 			publish_setpoint();
 		}
 

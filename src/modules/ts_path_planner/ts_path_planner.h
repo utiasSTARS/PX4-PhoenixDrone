@@ -17,6 +17,7 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/parameter_update.h>
 #include <platforms/px4_workqueue.h>
+#include <lib/LoopTimer/LoopTimer.h>
 
 
 class __EXPORT TailsitterPathPlanner{
@@ -65,6 +66,8 @@ private:
 		float speed;
 		float	yaw;
 	}_waypoint;
+
+	LoopTimer _looptimer;
 
 	static void	task_main_trampoline(int argc, char *argv[]);
 	void task_main();
