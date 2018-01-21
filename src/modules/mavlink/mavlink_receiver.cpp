@@ -765,7 +765,7 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	att_pos_mocap.id = msg->compid;
 
 	att_pos_mocap.timestamp = hrt_absolute_time();//sync_stamp(mocap.time_usec);
-	att_pos_mocap.timestamp_received = hrt_absolute_time();
+	att_pos_mocap.timestamp_received = mocap.time_usec;//hrt_absolute_time();
 
 	att_pos_mocap.q[0] = mocap.q[0];
 	att_pos_mocap.q[1] = mocap.q[1];
