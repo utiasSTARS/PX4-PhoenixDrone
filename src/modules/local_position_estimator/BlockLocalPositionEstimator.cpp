@@ -38,6 +38,7 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_sub_vision_pos(ORB_ID(vision_position_estimate), 1000 / 30, 0, &getSubscriptions()),
 	// mocap 50 hz
 	_sub_mocap(ORB_ID(att_pos_mocap), 1000 / 50, 0, &getSubscriptions()),
+	//_sub_groundtruth(ORB_ID(vehicle_local_position_groundtruth), 1000 / 50, 0, &getSubscriptions()),
 	// all distance sensors, 10 hz
 	_sub_dist0(ORB_ID(distance_sensor), 1000 / 10, 0, &getSubscriptions()),
 	_sub_dist1(ORB_ID(distance_sensor), 1000 / 10, 1, &getSubscriptions()),
@@ -748,9 +749,9 @@ void BlockLocalPositionEstimator::initSS()
 
 	// input matrix
 	_B.setZero();
-	//_B(X_vx, U_ax) = 1;
-	//_B(X_vy, U_ay) = 1;
-	//_B(X_vz, U_az) = 1;
+	_B(X_vx, U_ax) = 1;
+	_B(X_vy, U_ay) = 1;
+	_B(X_vz, U_az) = 1;
 
 	// update components that depend on current state
 	updateSSStates();
