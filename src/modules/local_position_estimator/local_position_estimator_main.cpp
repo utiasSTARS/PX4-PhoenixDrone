@@ -51,6 +51,7 @@
 #include <fcntl.h>
 #include <px4_posix.h>
 #include <px4_tasks.h>
+#include <systemlib/perf_counter.h>
 
 #include "BlockLocalPositionEstimator.hpp"
 
@@ -155,13 +156,18 @@ int local_position_estimator_thread_main(int argc, char *argv[])
 
 	BlockLocalPositionEstimator est;
 
+	perf_counter_t lpe_counter = perf_alloc(PC_INTERVAL, "lpe_interval");
+
 	thread_running = true;
 
 	while (!thread_should_exit) {
+		perf_count(lpe_counter);
 		est.update();
 	}
 
 	PX4_DEBUG("exiting.");
+
+	perf_free(lpe_counter);
 
 	thread_running = false;
 

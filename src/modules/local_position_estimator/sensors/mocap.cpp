@@ -52,7 +52,7 @@ int BlockLocalPositionEstimator::mocapMeasure(Vector<float, n_y_mocap> &y, Vecto
 	if (_mocap_old.timestamp != 0) {
 		v = (y - _mocap_old.position)/(_sub_mocap.get().timestamp_received - _mocap_old.timestamp)*1e6;
 	}
-	publishDebugTupple((int8_t*)"mocap_out", v(0));
+	publishDebugTupple((int8_t*)"mocap_out", v(2));
 	_mocap_old.timestamp = _sub_mocap.get().timestamp_received;
 	_mocap_old.position = y;
 	return OK;
