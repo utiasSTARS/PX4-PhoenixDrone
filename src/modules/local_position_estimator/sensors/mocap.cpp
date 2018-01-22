@@ -102,13 +102,13 @@ void BlockLocalPositionEstimator::mocapCorrect()
 
 	if (beta > BETA_TABLE[n_y_mocap*2]) {
 		if (!(_sensorFault & SENSOR_MOCAP)) {
-			//mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] mocap fault, beta %5.2f", double(beta));
+			mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] mocap fault, beta %5.2f", double(beta));
 			_sensorFault |= SENSOR_MOCAP;
 		}
 
 	} else if (_sensorFault & SENSOR_MOCAP) {
 		_sensorFault &= ~SENSOR_MOCAP;
-		//mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] mocap OK");
+		mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] mocap OK");
 	}
 
 	// kalman filter correction always
