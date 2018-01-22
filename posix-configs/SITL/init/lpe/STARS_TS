@@ -86,7 +86,7 @@ attitude_estimator_q start
 local_position_estimator start
 mc_pos_control start
 mixer load /dev/pwm_output0 ROMFS/px4fmu_common/mixers/caipirinha_vtol.main.mix
-mavlink start -u 14556 -r 2000000 -m custom -o 14540 -v
+mavlink start -u 14556 -r 2000000 -m config -o 14540 -v
 sdlog2 start -r 200 -e -t -a
 mavlink boot_complete
 replay trystart
