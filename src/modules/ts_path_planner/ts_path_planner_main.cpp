@@ -170,9 +170,11 @@ TailsitterPathPlanner::task_main()
 			publish_setpoint();
 		}
 
-//		publish_control_mode();
+
+
 
 	}
+	publish_control_mode();
 }
 
 void
