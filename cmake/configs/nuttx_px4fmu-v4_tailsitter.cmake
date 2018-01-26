@@ -115,7 +115,7 @@ set(config_module_list
 	# modules/segway # XXX Needs GCC 4.7 fix
 	modules/ts_att_control
 	modules/mc_pos_control
-	modules/ts_path_planer
+	modules/ts_path_planner
 	#modules/vtol_att_control
 
 	#

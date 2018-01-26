@@ -5,7 +5,6 @@
  * @author Xintong Du	<xintong.du@mail.utoronto.ca>
  *
  */
-#include <iostream>
 #include <px4_config.h>
 #include <px4_defines.h>
 #include <px4_tasks.h>
@@ -126,7 +125,6 @@ TailsitterPathPlanner::task_main()
 	_params_sub = orb_subscribe(ORB_ID(parameter_update));
 	_local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, 0);
-
 	while(!_task_should_exit){
 		_looptimer.wait();
 		poll_subscriptions();
@@ -169,12 +167,8 @@ TailsitterPathPlanner::task_main()
 
 			publish_setpoint();
 		}
-
-
-
-
 	}
-	publish_control_mode();
+
 }
 
 void
