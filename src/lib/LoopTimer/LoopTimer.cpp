@@ -12,7 +12,8 @@ void OnTimer(void *p) {
 	sem_t* sem_loop_timer = (sem_t*) p;
 	int svalue;
 	sem_getvalue(sem_loop_timer, &svalue);
-	if (svalue < 0)
+
+	if (svalue <= 0)
 		sem_post(sem_loop_timer);
 }
 
