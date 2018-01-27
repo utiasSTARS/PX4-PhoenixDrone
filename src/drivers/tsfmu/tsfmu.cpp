@@ -244,6 +244,8 @@ private:
 	perf_counter_t  _cycle_exec;
 	perf_counter_t  _capture_cb;
 	perf_counter_t  _esc_rads_main;
+	perf_counter_t  _esc_rads_pub;
+	perf_counter_t  _esc_rads_loop;
 
 	/*Debug Only, to be deleted */
 	volatile uint64_t ridi_timediffs[5];
@@ -402,6 +404,8 @@ TSFMU::TSFMU() :
 	_cycle_exec(perf_alloc(PC_INTERVAL, "cyc_exe")),
 	_capture_cb(perf_alloc(PC_INTERVAL, "capture callback")),
 	_esc_rads_main(perf_alloc(PC_ELAPSED, "esc_rads_meas")),
+	_esc_rads_pub(perf_alloc(PC_ELAPSED, "esc_rads_pub")),
+	_esc_rads_loop(perf_alloc(PC_INTERVAL, "esc_rads_loop")),
 	ridi_timediffs{0},
 	ridi_idx(0)
 {
@@ -532,6 +536,8 @@ TSFMU::~TSFMU()
 	perf_free(_cycle_exec);
 	perf_free(_capture_cb);
 	perf_free(_esc_rads_main);
+	perf_free(_esc_rads_pub);
+	perf_free(_esc_rads_loop);
 
 	g_fmu = nullptr;
 }
@@ -800,7 +806,7 @@ TSFMU::work_start()
 	/* start radsmeter task */
 	_rads_task = px4_task_spawn_cmd("radsmeter",
 					SCHED_DEFAULT,
-					SCHED_PRIORITY_MAX - 1,
+					181 - 1,
 					1000,
 					(px4_main_t)&TSFMU::rads_task_main_trampoline,
 					nullptr);
@@ -862,6 +868,7 @@ TSFMU::rads_task_main()
 	struct esc_rads_s esc_rads_msg;
 	hrt_abstime last_time = 0;
 	while(!_rads_task_should_exit) {
+		perf_count(_esc_rads_loop);
 
 		(void) clock_gettime (CLOCK_REALTIME, &time);
 		time.tv_nsec += TIMEOUT_MS * 1000 * 1000;
@@ -878,21 +885,23 @@ TSFMU::rads_task_main()
 
 		if (ret == 0)
 		{
-			/*Check if any timeDiff is invalid */
-			if ((now - CH_TIMEOUT_MS * 1000 ) > _current_edge_l) {
-				//printf("L-now:%llu\t current_edge:%llu\n", now, _current_edge_l);
-				reset_rads_meas(RPM_CH_LEFT);
-			}
-			if ((now - CH_TIMEOUT_MS * 1000) >  _current_edge_r) {
-				//printf("R-now:%llu\t current_edge:%llu\n", now, _current_edge_r);
-				reset_rads_meas(RPM_CH_RIGHT);
-			}
+			if (hrt_elapsed_time(&_last_rads_publish_time) > 1e3){
+				/*Check if any timeDiff is invalid */
+				if ((now - CH_TIMEOUT_MS * 1000 ) > _current_edge_l) {
+					//printf("L-now:%llu\t current_edge:%llu\n", now, _current_edge_l);
+					reset_rads_meas(RPM_CH_LEFT);
+				}
+				if ((now - CH_TIMEOUT_MS * 1000) >  _current_edge_r) {
+					//printf("R-now:%llu\t current_edge:%llu\n", now, _current_edge_r);
+					reset_rads_meas(RPM_CH_RIGHT);
+				}
 
 
-			_rads_l = _timeDiff_l_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
-			_rads_l_raw = _timeDiff_l ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l) : 0.f;
-			_rads_r = _timeDiff_r_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
-			_rads_r_raw = _timeDiff_r ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r) : 0.f;
+				_rads_l = _timeDiff_l_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
+				_rads_l_raw = _timeDiff_l ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l) : 0.f;
+				_rads_r = _timeDiff_r_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
+				_rads_r_raw = _timeDiff_r ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r) : 0.f;
+			}
 		}
 		/* timeout */
 		else
@@ -902,7 +911,7 @@ TSFMU::rads_task_main()
 			reset_rads_meas(RPM_CH_RIGHT);
 		}
 
-
+		perf_begin(_esc_rads_pub);
 		if (hrt_elapsed_time(&_last_rads_publish_time) > 1e3) {
 			esc_rads_msg.timestamp = hrt_absolute_time();
 			_last_rads_publish_time = esc_rads_msg.timestamp;
@@ -933,7 +942,7 @@ TSFMU::rads_task_main()
 				_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
 			}
 		}
-
+		perf_end(_esc_rads_pub);
 		perf_end(_esc_rads_main);
 	}
 
@@ -1893,8 +1902,7 @@ TSFMU::cycle()
 	/*
 	 * schedule next cycle
 	 */
-	work_queue(HPWORK, &_work, (worker_t)&TSFMU::cycle_trampoline, this, USEC2TICK(500));
-//		   USEC2TICK(SCHEDULE_INTERVAL - main_out_latency));
+	work_queue(HPWORK, &_work, (worker_t)&TSFMU::cycle_trampoline, this, USEC2TICK(SCHEDULE_INTERVAL));
 }
 
 void TSFMU::work_stop()
