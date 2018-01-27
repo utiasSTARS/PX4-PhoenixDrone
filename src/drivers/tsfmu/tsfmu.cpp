@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <lib/mathlib/mathlib.h>
+#include <lib/LoopTimer/LoopTimer.h>
 
 #include <nuttx/arch.h>
 
@@ -210,6 +211,7 @@ private:
 	bool _rads_task_should_exit;
 	int _rads_task;
 	sem_t _sem_timer;
+	LoopTimer _rads_calc_timer;
 	volatile uint64_t _last_edge_l;
 	volatile uint64_t _last_edge_r;
 	volatile uint64_t _current_edge_l;
@@ -374,6 +376,7 @@ TSFMU::TSFMU() :
 	_rads_task_should_exit(false),
 	_rads_task(-1),
 	_sem_timer{0},
+	_rads_calc_timer(2e3),
 	_last_edge_l(0),
 	_last_edge_r(0),
 	_current_edge_l(0),
@@ -869,6 +872,7 @@ TSFMU::rads_task_main()
 	hrt_abstime last_time = 0;
 	while(!_rads_task_should_exit) {
 		perf_count(_esc_rads_loop);
+		_rads_calc_timer.wait();
 
 		(void) clock_gettime (CLOCK_REALTIME, &time);
 		time.tv_nsec += TIMEOUT_MS * 1000 * 1000;
