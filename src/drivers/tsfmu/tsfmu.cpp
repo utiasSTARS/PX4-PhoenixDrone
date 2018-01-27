@@ -226,6 +226,7 @@ private:
 	volatile float _rads_r;
 	volatile float _rads_l_raw;
 	volatile float _rads_r_raw;
+	volatile uint64_t _last_rads_publish_time;
 	orb_advert_t	_rads_pub;
 
 	/* PWM Calibration */
@@ -387,6 +388,7 @@ TSFMU::TSFMU() :
 	_rads_r(0.f),
 	_rads_l_raw(0.f),
 	_rads_r_raw(0.f),
+	_last_rads_publish_time(0),
 	_rads_pub(nullptr),
 	_is_calib(false),
 	_outputs_calib{0},
@@ -868,9 +870,10 @@ TSFMU::rads_task_main()
 			time.tv_sec++;
 			time.tv_nsec -= 1000 * 1000 * 1000;
 		}
-		perf_begin(_esc_rads_main);
+
 		int ret = sem_timedwait (&_sem_timer, &time);
-		perf_end(_esc_rads_main);
+
+		perf_begin(_esc_rads_main);
 		hrt_abstime now = hrt_absolute_time();
 
 		if (ret == 0)
@@ -898,34 +901,40 @@ TSFMU::rads_task_main()
 			reset_rads_meas(RPM_CH_LEFT);
 			reset_rads_meas(RPM_CH_RIGHT);
 		}
-		esc_rads_msg.timestamp = hrt_absolute_time();
-		_esc_rads_delay = hrt_elapsed_time(&last_time);
-		last_time = esc_rads_msg.timestamp;
-		esc_rads_msg.rads_filtered[0] = _rads_l;
-		esc_rads_msg.rads_raw[0] = _rads_l_raw;
-		esc_rads_msg.rads_filtered[1] = _rads_r;
-		esc_rads_msg.rads_raw[1] = _rads_r_raw;
-		esc_rads_msg.rads_filtered[2] = 0;
-		esc_rads_msg.rads_raw[2] = 0;
-		esc_rads_msg.rads_filtered[3] = 0;
-		esc_rads_msg.rads_raw[3] = 0;
-		//memcpy(&_esc_rads_msg, &esc_rads_msg, sizeof(esc_rads_msg));
 
-		if(esc_rads_msg.rads_raw[0] < 0 || esc_rads_msg.rads_raw[0] > 10000.f){
-			esc_rads_msg.rads_raw[0] = 0;
-			warnx("esc rads 0 not normal.\n");
-		}
-		if(esc_rads_msg.rads_raw[1] < 0 || esc_rads_msg.rads_raw[1] > 10000.f){
-			esc_rads_msg.rads_raw[1] = 0;
-			warnx("esc rads 1 not normal.\n");
-		}
-		if (_rads_pub != nullptr) {
-			orb_publish(ORB_ID(esc_rads), _rads_pub, &esc_rads_msg);
 
-		} else {
-			_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
+		if (hrt_elapsed_time(&_last_rads_publish_time) > 1e3) {
+			esc_rads_msg.timestamp = hrt_absolute_time();
+			_last_rads_publish_time = esc_rads_msg.timestamp;
+			_esc_rads_delay = hrt_elapsed_time(&last_time);
+			last_time = esc_rads_msg.timestamp;
+			esc_rads_msg.rads_filtered[0] = _rads_l;
+			esc_rads_msg.rads_raw[0] = _rads_l_raw;
+			esc_rads_msg.rads_filtered[1] = _rads_r;
+			esc_rads_msg.rads_raw[1] = _rads_r_raw;
+			esc_rads_msg.rads_filtered[2] = 0;
+			esc_rads_msg.rads_raw[2] = 0;
+			esc_rads_msg.rads_filtered[3] = 0;
+			esc_rads_msg.rads_raw[3] = 0;
+			//memcpy(&_esc_rads_msg, &esc_rads_msg, sizeof(esc_rads_msg));
+
+			if(esc_rads_msg.rads_raw[0] < 0 || esc_rads_msg.rads_raw[0] > 10000.f){
+				esc_rads_msg.rads_raw[0] = 0;
+				warnx("esc rads 0 not normal.\n");
+			}
+			if(esc_rads_msg.rads_raw[1] < 0 || esc_rads_msg.rads_raw[1] > 10000.f){
+				esc_rads_msg.rads_raw[1] = 0;
+				warnx("esc rads 1 not normal.\n");
+			}
+			if (_rads_pub != nullptr) {
+				orb_publish(ORB_ID(esc_rads), _rads_pub, &esc_rads_msg);
+
+			} else {
+				_rads_pub = orb_advertise(ORB_ID(esc_rads), &esc_rads_msg);
+			}
 		}
 
+		perf_end(_esc_rads_main);
 	}
 
 	_rads_task = -1;
