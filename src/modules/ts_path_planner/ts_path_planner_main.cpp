@@ -97,10 +97,10 @@ TailsitterPathPlanner::start(){
 
 	ASSERT(_planner_task == -1);
 
-	_planner_task = px4_task_spawn_cmd("ts_att_control",
+	_planner_task = px4_task_spawn_cmd("ts_path_planner",
 					   SCHED_DEFAULT,
 					   SCHED_PRIORITY_MAX - 5,
-					   3000,
+					   1000,
 					   (px4_main_t)&TailsitterPathPlanner::task_main_trampoline,
 					   nullptr);
 
