@@ -1202,7 +1202,7 @@ MulticopterPositionControl::control_non_manual(float dt)
 				// into an integral part and into a P part
 				_thrust_int(2) = _takeoff_thrust_sp - _params.vel_p(2) * fabsf(_vel(2));
 				_thrust_int(2) = -math::constrain(_thrust_int(2), _params.thr_min, _params.thr_max);
-				_vel_sp_prev(2) = -_params.tko_speed;
+				_vel_sp_prev(2) = 0;//-_params.tko_speed;
 				_takeoff_jumped = true;
 				_reset_int_z = false;
 			}
@@ -1812,8 +1812,8 @@ MulticopterPositionControl::control_position(float dt)
 //			thrust_sp(2) = 0.0f;
 //		}
 
-		math::Vector<3> gravity(0, 0, 0.53f * ONE_G);
-		math::Vector<3> f_prop = thrust_sp * 0.53f - gravity;
+		math::Vector<3> gravity(0, 0, 0.63f * ONE_G);
+		math::Vector<3> f_prop = thrust_sp * 0.63f - gravity;
 		//warnx("Before Before Thrust setpoint: %f, %f, %f\n", (double)thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
 		thrust_sp = f_prop;
 		//warnx("Before Thrust setpoint: %f, %f, %f\n", (double)thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
