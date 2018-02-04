@@ -450,11 +450,11 @@ TSFMU::TSFMU() :
 	_mixer_info.deg_max = 50.f;
 	_mixer_info.deg_min = -50.f;
 	_mixer_info.k_c[0] = 5.0532088280f;
-	_mixer_info.k_c[1] = 5.2219347954f;
+	_mixer_info.k_c[1] = 5.8084087372f;//5.2219347954f;
 	_mixer_info.k_w2[0] = 0.0000024338f;//1.f;
-	_mixer_info.k_w2[1] = 0.0000027612f;
+	_mixer_info.k_w2[1] = 0.0000028317f;//0.0000027612f;
 	_mixer_info.k_w[0] = 0.0055421125f;//1.f;
-	_mixer_info.k_w[1] = 0.0052889767f;
+	_mixer_info.k_w[1] = 0.0029842625f;//0.0052889767f;
 	_mixer_info.k_p = 0.01f;//0.02f;//0.005818f;
 	_mixer_info.k_i = 0.f;//0.037584f;//0.333088f;
 	_mixer_info.int_term_lim = 1.5f;
@@ -1077,7 +1077,8 @@ TSFMU::fit_curve(){
 	float esc_rads_avg[2];
 
 	int num_intervals = CALIB_NUM_INTVL;
-	float h = 2.f / num_intervals;
+	float start_pwm = 0.3f;
+	float h = (2.f - start_pwm) / num_intervals;
 
 	FILE *fd;
 	float A_l[num_intervals][3];
@@ -1088,7 +1089,7 @@ TSFMU::fit_curve(){
 
 	for (int i=0; i<num_intervals; i++){
 		for(int j=0; j<2; j++){
-			pwm_outputs[j] = -1.f + 0.01f + i * h;
+			pwm_outputs[j] = -1.f + start_pwm + i * h;
 			pwm_outputs[j] = (pwm_outputs[j] > 1) ? 1 : pwm_outputs[j];
 			pwm_outputs[j+2] = 0;
 		}
@@ -1107,8 +1108,8 @@ TSFMU::fit_curve(){
 							(double) (_esc_rads_msg.rads_filtered[0]  * 60.f / (2.f*PI)), (double) (_esc_rads_msg.rads_filtered[1]  * 60.f / (2.f*PI)),
 							(double) (esc_rads_avg[0] * 60 / (2.f * PI)),(double) (esc_rads_avg[1] * 60 / (2.f * PI)));
 
-		y_l[i] = pwm_outputs[0];
-		y_r[i] = pwm_outputs[1];
+		y_l[i] = (pwm_outputs[0] + 1.f) / 2.f * _curr_batt_volt;
+		y_r[i] = (pwm_outputs[1] + 1.f) / 2.f * _curr_batt_volt;
 
 		A_l[i][0] = esc_rads_avg[0] * esc_rads_avg[0];
 		A_l[i][1] = esc_rads_avg[0];
@@ -1158,17 +1159,17 @@ TSFMU::fit_curve(){
 	ATA_inv = (AT * A).inversed();
 	math::Vector<3> coeff_r = (ATA_inv * AT) * y;
 
-	float voltage = _curr_batt_volt;
+//	float voltage = _curr_batt_volt;
 	// map from (-1, 1) to voltage
-	coeff_l = coeff_l * 500;
-	coeff_l(2) += 1500;
-	coeff_l = coeff_l * (voltage / (1000000.f / _pwm_alt_rate));
+//	coeff_l = coeff_l * 500;
+//	coeff_l(2) += 1500;
+//	coeff_l = coeff_l * (voltage / (1000000.f / _pwm_alt_rate));
+//
+//	coeff_r = coeff_r * 500;
+//	coeff_r(2) += 1500;
+//	coeff_r = coeff_r * (voltage / (1000000.f / _pwm_alt_rate));
 
-	coeff_r = coeff_r * 500;
-	coeff_r(2) += 1500;
-	coeff_r = coeff_r * (voltage / (1000000.f / _pwm_alt_rate));
-
-	printf("curr voltage: %.5f",(double) voltage);
+//	printf("curr voltage: %.5f",(double) voltage);
 	printf("pwm-omega fit results,\n L: %.10f, %.10f, %.10f\n R: %.10f, %.10f, %.10f\n",
 			(double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
 			(double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
@@ -1195,23 +1196,23 @@ TSFMU::fit_curve(){
 		param_set(param_handle, &coeff_l(2));
 	}
 
-//	param_handle = param_find("TS_MOT1_KW2");
-//
-//	if (param_handle != PARAM_INVALID) {
-//		param_set(param_handle, coeff_r(0));
-//	}
-//
-//	param_handle = param_find("TS_MOT1_KW");
-//
-//	if (param_handle != PARAM_INVALID) {
-//		param_set(param_handle, coeff_r(1));
-//	}
-//
-//	param_handle = param_find("TS_MOT1_KC");
-//
-//	if (param_handle != PARAM_INVALID) {
-//		param_set(param_handle, coeff_r(2));
-//	}
+	param_handle = param_find("TS_MOT1_KW2");
+
+	if (param_handle != PARAM_INVALID) {
+		param_set(param_handle, &coeff_r(0));
+	}
+
+	param_handle = param_find("TS_MOT1_KW");
+
+	if (param_handle != PARAM_INVALID) {
+		param_set(param_handle, &coeff_r(1));
+	}
+
+	param_handle = param_find("TS_MOT1_KC");
+
+	if (param_handle != PARAM_INVALID) {
+		param_set(param_handle, &coeff_r(2));
+	}
 
 	pwm_outputs[0] = -1;
 
@@ -1668,22 +1669,25 @@ TSFMU::cycle()
 			/*pi controller controls*/
 			if (_rotor_controller_init){
 
-				if(!_got_first_cmd && _ts_controls[0].control[0] > 122.f && _ts_controls[0].control[1] > 122.f){
-					_got_first_cmd = true;
-					_ts_mixer->clear_integral(0);
-					_ts_mixer->clear_integral(1);
-				}
+//				if(!_got_first_cmd && _ts_controls[0].control[0] > 122.f && _ts_controls[0].control[1] > 122.f){
+//					_got_first_cmd = true;
+//					_ts_mixer->clear_integral(0);
+//					_ts_mixer->clear_integral(1);
+//				}
 				_ts_mixer->set_curr_omega_valid(meas_valid);
 
 				// outputs are voltage
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
-				//publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
+				publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
 
 				// change output to pwm scaled to (-1, 1)
 				for(unsigned int i=0; i<2; i++){
-					outputs[i] = (outputs[i] / _curr_batt_volt) * (1000000.f / _pwm_alt_rate);
-					outputs[i] = (outputs[i] - 1500.f) / 500.f;
+//					outputs[i] = (outputs[i] / _curr_batt_volt) * (1000000.f / _pwm_alt_rate);
+//					outputs[i] = (outputs[i] - 1500.f) / 500.f;
+//					outputs[i] = math::constrain(outputs[i], -1.f, 1.f);
+
+					outputs[i] = outputs[i] / _curr_batt_volt * 2.f- 1.f;//linear scale from [0, 1] to [-1, 1]
 					outputs[i] = math::constrain(outputs[i], -1.f, 1.f);
 				}
 
@@ -1719,8 +1723,8 @@ TSFMU::cycle()
 			uint16_t pwm_limited[_max_actuators];
 			uint16_t min_pwm_armed[_max_actuators];
 			memcpy(min_pwm_armed, _min_pwm, sizeof(_min_pwm));
-			min_pwm_armed[0] += 10;
-			min_pwm_armed[1] += 10;
+			min_pwm_armed[0] += 100;
+			min_pwm_armed[1] += 100;
 
 			/* the PWM limit call takes care of out of band errors, NaN and constrains */
 			pwm_limit_calc(_throttle_armed, arm_nothrottle(), num_outputs, _reverse_pwm_mask,
@@ -2806,6 +2810,12 @@ TSFMU::print_info()
 	printf("\n");
 	printf("rads-L: %.2f\n", (double)(_rads_l));
 	printf("rads-R: %.2f\n", (double)(_rads_r));
+
+	for (int i=0; i<2; i++){
+		printf("Mixer info KC%d: %.10f\n", i, (double) _mixer_info.k_c[i]);
+		printf("Mixer info KW%d: %.10f\n", i, (double) _mixer_info.k_w[i]);
+		printf("Mixer info KW2%d: %.10f\n", i, (double) _mixer_info.k_w2[i]);
+	}
 
 	perf_print_counter(_capture_cb);
 
