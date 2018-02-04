@@ -386,7 +386,7 @@ void AttitudeEstimatorQ::task_main()
 		if (mocap_updated) {
 			orb_copy(ORB_ID(att_pos_mocap), _mocap_sub, &_mocap);
 			math::Quaternion q(_mocap.q);
-			_q = q;
+			//_q = q;
 			math::Matrix<3, 3> Rmoc = q.to_dcm();
 
 			math::Vector<3> v(1.0f, 0.0f, 0.4f);
