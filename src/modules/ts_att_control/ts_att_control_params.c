@@ -306,7 +306,7 @@ PARAM_DEFINE_FLOAT(TS_YAW_RATE_MAX, 0.4f);
  * @increment 0.0000001
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_J_XX, 0.147563f);
+PARAM_DEFINE_FLOAT(TS_J_XX, 0.0144f);
 /**
  * TS Moment of Inertia yy
  *
@@ -318,7 +318,7 @@ PARAM_DEFINE_FLOAT(TS_J_XX, 0.147563f);
  * @increment 0.0000001
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_J_YY, 0.0458929f);
+PARAM_DEFINE_FLOAT(TS_J_YY, 0.00638929f);
 /**
  * TS Moment of Inertia zz
  *
@@ -330,7 +330,7 @@ PARAM_DEFINE_FLOAT(TS_J_YY, 0.0458929f);
  * @increment 0.0000001
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_J_ZZ, 0.1977f);
+PARAM_DEFINE_FLOAT(TS_J_ZZ, 0.0176f);
 /**
  * TS Drag Constant
  *
