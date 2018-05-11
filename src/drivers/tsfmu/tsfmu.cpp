@@ -435,6 +435,7 @@ TSFMU::TSFMU() :
 		_failsafe_pwm[i] = (PWM_SERVO_MIN + PWM_SERVO_MAX) / 2;
 		_disarmed_pwm[i] = 500;
 	}
+	_trim_pwm[4] = 54;
 
 	_num_disarmed_set = 4;
 	_num_failsafe_set = 4;
@@ -1679,7 +1680,7 @@ TSFMU::cycle()
 				// outputs are voltage
 				num_outputs = _ts_mixer->mix(outputs, num_outputs, NULL);
 
-				publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
+				//publish_debug_tupple((int8_t*) "ts_out1", outputs[0]);
 
 				// change output to pwm scaled to (-1, 1)
 				for(unsigned int i=0; i<2; i++){

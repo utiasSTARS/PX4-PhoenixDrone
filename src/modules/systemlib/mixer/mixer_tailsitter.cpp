@@ -193,7 +193,7 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	float rads_left  = constrain(get_control(0, 0), 220, _mixer_info.rads_max);
 	float rads_right = constrain(get_control(0, 1), 220, _mixer_info.rads_max);
 
-	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max);
+	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max)+5.4f;
 	float elv_right = constrain(get_control(0, 3), _mixer_info.deg_min, _mixer_info.deg_max);
 
 	// replace static mapping with a pi controller
@@ -240,7 +240,7 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 
 	//Elevon deflections are linear, just normalize between -1, 1
 	outputs[4] = normalize(elv_left , _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
-	outputs[5] = -normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f)+0.12f;
+	outputs[5] = -normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
 
 	_prev_outputs[0] = outputs[0];
 	_prev_outputs[1] = outputs[1];
