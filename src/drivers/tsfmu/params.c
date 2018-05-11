@@ -6,6 +6,20 @@
  */
 
 /**
+ * PWM Left Servo Trim.
+ *
+ * @group TS
+ */
+PARAM_DEFINE_FLOAT(TS_PWM_TRIM_L, 54);
+
+/**
+ * PWM Right Servo Trim.
+ *
+ * @group TS
+ */
+PARAM_DEFINE_FLOAT(TS_PWM_TRIM_R, 0);
+
+/**
  * Motor PI controller P gain.
  *
  * @group TS

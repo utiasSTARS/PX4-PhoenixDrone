@@ -435,7 +435,21 @@ TSFMU::TSFMU() :
 		_failsafe_pwm[i] = (PWM_SERVO_MIN + PWM_SERVO_MAX) / 2;
 		_disarmed_pwm[i] = 500;
 	}
-	_trim_pwm[4] = 54;
+
+	param_t param_handle;
+
+	// asign trim pwm values from parameters
+	param_handle = param_find("TS_PWM_TRIM_L");
+
+	if (param_handle != PARAM_INVALID) {
+		param_get(param_handle, &_trim_pwm[4]);
+	}
+
+	param_handle = param_find("TS_PWM_TRIM_R");
+
+	if (param_handle != PARAM_INVALID) {
+		param_get(param_handle, &_trim_pwm[5]);
+	}
 
 	_num_disarmed_set = 4;
 	_num_failsafe_set = 4;
@@ -1729,7 +1743,7 @@ TSFMU::cycle()
 
 			/* the PWM limit call takes care of out of band errors, NaN and constrains */
 			pwm_limit_calc(_throttle_armed, arm_nothrottle(), num_outputs, _reverse_pwm_mask,
-				       _disarmed_pwm, min_pwm_armed, _max_pwm, outputs, pwm_limited, &_pwm_limit);
+				       _disarmed_pwm, min_pwm_armed, _max_pwm, _trim_pwm, outputs, pwm_limited, &_pwm_limit);
 
 			//warn("pre_armed: %d",arm_nothrottle());
 			/* overwrite outputs in case of force_failsafe with _failsafe_pwm PWM values */

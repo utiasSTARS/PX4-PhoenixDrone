@@ -193,7 +193,7 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	float rads_left  = constrain(get_control(0, 0), 220, _mixer_info.rads_max);
 	float rads_right = constrain(get_control(0, 1), 220, _mixer_info.rads_max);
 
-	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max)+5.4f;
+	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max);
 	float elv_right = constrain(get_control(0, 3), _mixer_info.deg_min, _mixer_info.deg_max);
 
 	// replace static mapping with a pi controller
