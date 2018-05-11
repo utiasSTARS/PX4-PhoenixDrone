@@ -36,8 +36,8 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_sub_gps(ORB_ID(vehicle_gps_position), 1000 / 10, 0, &getSubscriptions()),
 	// vision 30 hz
 	_sub_vision_pos(ORB_ID(vision_position_estimate), 1000 / 30, 0, &getSubscriptions()),
-	// mocap 50 hz
-	_sub_mocap(ORB_ID(att_pos_mocap), 1000 / 50, 0, &getSubscriptions()),
+	// mocap 100 hz
+	_sub_mocap(ORB_ID(att_pos_mocap), 1000 / 100, 0, &getSubscriptions()),
 	//_sub_groundtruth(ORB_ID(vehicle_local_position_groundtruth), 1000 / 50, 0, &getSubscriptions()),
 	// all distance sensors, 10 hz
 	_sub_dist0(ORB_ID(distance_sensor), 1000 / 10, 0, &getSubscriptions()),
@@ -708,6 +708,7 @@ void BlockLocalPositionEstimator::publishGlobalPos()
 void BlockLocalPositionEstimator::publishDebugTupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
+	_dbg_tupple.timestamp = hrt_absolute_time();
 	_dbg_tupple.value = isnan(value)?-1.9950830f:value;
 
 	if (_debug_pub == nullptr) {
