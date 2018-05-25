@@ -89,7 +89,7 @@
   worst case timing jitter due to other timers
  */
 #define MPU9250_TIMER_REDUCTION				200
-#define MPU9250_ACCEL_ALT_DRIVER_FILTER_FREQ 20
+
 
 /*
   list of registers that will be checked in check_registers(). Note
@@ -149,9 +149,9 @@ MPU9250::MPU9250(device::Device *interface, device::Device *mag_interface, const
 	_controller_latency_perf(perf_alloc_once(PC_ELAPSED, "ctrl_latency")),
 	_register_wait(0),
 	_reset_wait(0),
-	_accel_filter_x(MPU9250_ACCEL_DEFAULT_RATE, MPU9250_ACCEL_ALT_DRIVER_FILTER_FREQ),
-	_accel_filter_y(MPU9250_ACCEL_DEFAULT_RATE, MPU9250_ACCEL_ALT_DRIVER_FILTER_FREQ),
-	_accel_filter_z(MPU9250_ACCEL_DEFAULT_RATE, MPU9250_ACCEL_ALT_DRIVER_FILTER_FREQ),
+	_accel_filter_x(MPU9250_ACCEL_DEFAULT_RATE, MPU9250_ACCEL_DEFAULT_DRIVER_FILTER_FREQ),
+	_accel_filter_y(MPU9250_ACCEL_DEFAULT_RATE, MPU9250_ACCEL_DEFAULT_DRIVER_FILTER_FREQ),
+	_accel_filter_z(MPU9250_ACCEL_DEFAULT_RATE, MPU9250_ACCEL_DEFAULT_DRIVER_FILTER_FREQ),
 	_gyro_filter_x(MPU9250_GYRO_DEFAULT_RATE, MPU9250_GYRO_DEFAULT_DRIVER_FILTER_FREQ),
 	_gyro_filter_y(MPU9250_GYRO_DEFAULT_RATE, MPU9250_GYRO_DEFAULT_DRIVER_FILTER_FREQ),
 	_gyro_filter_z(MPU9250_GYRO_DEFAULT_RATE, MPU9250_GYRO_DEFAULT_DRIVER_FILTER_FREQ),
@@ -1408,8 +1408,7 @@ MPU9250::measure()
 	arb.y = _accel_filter_y.apply(y_in_new);
 	arb.z = _accel_filter_z.apply(z_in_new);
 
-	//math::Vector<3> aval(x_in_new, y_in_new, z_in_new);
-	math::Vector<3> aval(arb.x, arb.y, arb.z);
+	math::Vector<3> aval(x_in_new, y_in_new, z_in_new);
 	math::Vector<3> aval_integrated;
 
 	bool accel_notify = _accel_int.put(arb.timestamp, aval, aval_integrated, arb.integral_dt);
