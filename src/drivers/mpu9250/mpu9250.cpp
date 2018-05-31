@@ -170,11 +170,13 @@ MPU9250::MPU9250(device::Device *interface, device::Device *mag_interface, const
 	_device_id.devid_s.devtype = DRV_ACC_DEVTYPE_MPU9250;
 	_device_id.devid_s.bus = _interface->get_device_bus();;
 	_device_id.devid_s.address = _interface->get_device_address();;
+	_device_id.devid_s.bus_type = (device::Device::DeviceBusType)_interface->get_device_bus_type();
 
 	/* Prime _gyro with parents devid. */
 	/* Set device parameters and make sure parameters of the bus device are adopted */
 	_gyro->_device_id.devid = _device_id.devid;
 	_gyro->_device_id.devid_s.devtype = DRV_GYR_DEVTYPE_MPU9250;
+	_gyro->_device_id.devid_s.bus_type = _interface->get_device_bus_type();
 	_gyro->_device_id.devid_s.bus = _interface->get_device_bus();
 	_gyro->_device_id.devid_s.address = _interface->get_device_address();
 
@@ -1408,7 +1410,7 @@ MPU9250::measure()
 	arb.y = _accel_filter_y.apply(y_in_new);
 	arb.z = _accel_filter_z.apply(z_in_new);
 
-	math::Vector<3> aval(x_in_new, y_in_new, z_in_new);
+	math::Vector<3> aval(arb.x, arb.y, arb.z);
 	math::Vector<3> aval_integrated;
 
 	bool accel_notify = _accel_int.put(arb.timestamp, aval, aval_integrated, arb.integral_dt);
@@ -1423,6 +1425,7 @@ MPU9250::measure()
 
 	arb.temperature_raw = report.temp;
 	arb.temperature = _last_temperature;
+	arb.device_id = 9250;
 
 	grb.x_raw = report.gyro_x;
 	grb.y_raw = report.gyro_y;
@@ -1443,7 +1446,7 @@ MPU9250::measure()
 	grb.y = _gyro_filter_y.apply(y_gyro_in_new);
 	grb.z = _gyro_filter_z.apply(z_gyro_in_new);
 
-	math::Vector<3> gval(x_gyro_in_new, y_gyro_in_new, z_gyro_in_new);
+	math::Vector<3> gval(grb.x, grb.y, grb.z);
 	math::Vector<3> gval_integrated;
 
 	bool gyro_notify = _gyro_int.put(arb.timestamp, gval, gval_integrated, grb.integral_dt);
