@@ -307,7 +307,7 @@ TailsitterMixer::_rotor_control(float dt, float* omega_desired, float** pwm_outp
 
 	math::Vector<2> error = desired - _curr_omegas;
 //	if (~isnan(error(0)) && ~isnan(error(1))) 	_pi_integrals = _pi_integrals + error * dt;
-	if (isnan(error(0)) || isnan(error(1))){
+	if (std::isnan(error(0)) || std::isnan(error(1))){
 		_pi_integrals.zero();
 		//warnx("Error Nan, Clear Integral!\n");
 	}

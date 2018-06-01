@@ -10,6 +10,7 @@
 #include <px4_defines.h>
 #include <px4_tasks.h>
 #include <px4_posix.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -650,7 +651,7 @@ TailsitterAttitudeControl::publish_debug_tupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
 	_dbg_tupple.value = value;
-	value = isnan(value)?-1:value;
+	value = std::isnan(value)?-1:value;
 
 	if (_debug_outputs_pub == nullptr) {
 		_debug_outputs_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
@@ -1202,7 +1203,7 @@ int ts_att_control_main(int argc, char *argv[])
 		if(argc == 3 && !strcmp(argv[2], "gazebo")){
 			ts_att_control::g_control->sitl_enabled = true;
 			PX4_INFO("sitl enabled");
-		}else{
+		} else {
 			PX4_INFO("sitl disabled");
 		}
 

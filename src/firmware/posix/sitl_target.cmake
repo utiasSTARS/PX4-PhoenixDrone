@@ -74,7 +74,7 @@ ExternalProject_Add_Step(sitl_gazebo forceconfigure
 # create targets for each viewer/model/debugger combination
 set(viewers none jmavsim gazebo replay)
 set(debuggers none ide gdb lldb ddd valgrind)
-set(models none iris iris_opt_flow standard_vtol plane solo tailsitter STARS_TS typhoon_h480)
+set(models none iris iris_opt_flow standard_vtol plane solo tailsitter STARS_TS apriltag typhoon_h480)
 set(all_posix_vmd_make_targets)
 foreach(viewer ${viewers})
 	foreach(debugger ${debuggers})

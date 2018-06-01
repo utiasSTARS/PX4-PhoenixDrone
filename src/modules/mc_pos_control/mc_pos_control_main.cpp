@@ -100,6 +100,8 @@
  */
 extern "C" __EXPORT int mc_pos_control_main(int argc, char *argv[]);
 
+using namespace std;
+
 class MulticopterPositionControl : public control::SuperBlock
 {
 public:
