@@ -75,3 +75,16 @@ PARAM_DEFINE_FLOAT(TS_MOT1_KW, 0.0023399056);
  */
 PARAM_DEFINE_FLOAT(TS_MOT1_KC, 5.6532120705);
 
+/**
+ * Rads Cutoff Frequency
+ *
+ * @group TS
+ */
+PARAM_DEFINE_FLOAT(TS_RADS_CF, 80.0);
+
+/**
+ * Rads Cutoff Frequency
+ *
+ * @group TS
+ */
+PARAM_DEFINE_INT32(TS_RADS_FILT, 0);
