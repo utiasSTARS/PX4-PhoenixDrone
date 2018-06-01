@@ -22,7 +22,6 @@
 #include <unistd.h>
 #include <lib/mathlib/mathlib.h>
 #include <lib/LoopTimer/LoopTimer.h>
-#include <mathlib/math/filter/LowPassFilter2p.hpp>
 
 #include <nuttx/arch.h>
 
@@ -128,11 +127,8 @@ public:
 
 	void print_info();
 	void perf_counter_reset();
-	void calibrate(char* argv[]);
+	void calibrate(char* argv);
 	void update_mixer_params(int argc, char *argv[]);
-
-	/* Calibration */
-	int 	pwm_setpoint;
 private:
 
 	bool _report_lock = true;
@@ -235,13 +231,6 @@ private:
 	volatile uint64_t _last_rads_publish_time;
 	orb_advert_t	_rads_pub;
 
-	/* Motor Rads Filter*/
-	float _rads_cutoff_freq;
-	float _rads_filt_coeff;
-	int _rads_filt_idx;
-	math::LowPassFilter2p _rads_l_filt_2;
-	math::LowPassFilter2p _rads_r_filt_2;
-
 	/* PWM Calibration */
 	bool	_is_calib;
 	float	_outputs_calib[4];
@@ -279,9 +268,6 @@ private:
 
 	static void pid_trampoline(void *arg);
 	void		calc_pid_param();
-
-	static void pwm_trampoline(void *arg);
-	void 		set_pwm();
 
 	static int ts_control_callback(uintptr_t handle,
 					 uint8_t control_group,
@@ -345,7 +331,6 @@ TSFMU	*g_fmu;
 
 TSFMU::TSFMU() :
 	CDev("tsfmu", TSFMU_DEV_PATH),
-	pwm_setpoint{0},
 	_pwm_default_rate(50),
 	_pwm_alt_rate(50),
 	_pwm_alt_rate_channels(0),
@@ -410,13 +395,8 @@ TSFMU::TSFMU() :
 	_rads_r_raw(0.f),
 	_last_rads_publish_time(0),
 	_rads_pub(nullptr),
-	_rads_cutoff_freq(0.f),
-	_rads_filt_coeff(0.f),
-	_rads_filt_idx(0),
-	_rads_l_filt_2(1000.0, _rads_cutoff_freq),
-	_rads_r_filt_2(1000.0, _rads_cutoff_freq),
 	_is_calib(false),
-	_outputs_calib{-1},
+	_outputs_calib{0},
 	_esc_rads_calib{0},
 	_esc_rads_curr_indx_calib(0),
 	_esc_rads_avg_calib{0},
@@ -469,22 +449,6 @@ TSFMU::TSFMU() :
 
 	if (param_handle != PARAM_INVALID) {
 		param_get(param_handle, &_trim_pwm[5]);
-	}
-
-	param_handle = param_find("TS_RADS_CF");
-
-	if (param_handle != PARAM_INVALID) {
-		param_get(param_handle, &_rads_cutoff_freq);
-	}
-
-	_rads_filt_coeff = exp(-2*PI*_rads_cutoff_freq*0.001f);
-	_rads_l_filt_2.set_cutoff_frequency(1000.f, _rads_filt_coeff);
-	_rads_r_filt_2.set_cutoff_frequency(1000.f, _rads_filt_coeff);
-
-	param_handle = param_find("TS_RADS_FILT");
-
-	if (param_handle != PARAM_INVALID) {
-		param_get(param_handle, &_rads_filt_idx);
 	}
 
 	_num_disarmed_set = 4;
@@ -1041,13 +1005,13 @@ TSFMU::capture_callback(uint32_t chan_index,
 			_timeIdx_l = (_timeIdx_l + 1) % MED_FIL_ENTRY;
 
 			uint64_t timediff_valid = check_anomaly(_time_l, MED_FIL_ENTRY, _timeDiff_l);
-			if(!_rads_filt_idx)
-				_timeDiff_l_fil = _rads_filt_coeff * _timeDiff_l_fil +
-								  (1 - _rads_filt_coeff) * timediff_valid;
-			else if (_rads_filt_idx == 1)
-				_timeDiff_l_fil = _rads_l_filt_2.apply(timediff_valid);
+			_timeDiff_l_fil = RADS_FILTER_CONSTANT * _timeDiff_l_fil +
+							(1 - RADS_FILTER_CONSTANT) * timediff_valid;
 		}
 		_last_edge_l = edge_time;
+
+
+
 
 	}
 
@@ -1068,11 +1032,8 @@ TSFMU::capture_callback(uint32_t chan_index,
 			_timeIdx_r = (_timeIdx_r + 1) % MED_FIL_ENTRY;
 
 			uint64_t timediff_valid = check_anomaly(_time_r, MED_FIL_ENTRY, edge_time);
-			if(!_rads_filt_idx)
-				_timeDiff_r_fil = _rads_filt_coeff * _timeDiff_r_fil +
-							     (1 - _rads_filt_coeff) * timediff_valid;
-			else if (_rads_filt_idx == 1)
-				_timeDiff_r_fil = _rads_r_filt_2.apply(timediff_valid);
+			_timeDiff_r_fil = RADS_FILTER_CONSTANT * _timeDiff_r_fil +
+					(1 - RADS_FILTER_CONSTANT) * timediff_valid;
 		}
 
 		_last_edge_r = edge_time;
@@ -1089,55 +1050,11 @@ TSFMU::capture_callback(uint32_t chan_index,
 
 
 void
-TSFMU::calibrate(char* argv[]){
-	if (!strcmp(argv[0], "fit"))
+TSFMU::calibrate(char* argv){
+	if (!strcmp(argv, "fit"))
 		work_queue(LPWORK, &_work_calib, (worker_t)&TSFMU::fit_curve_trampoline, this, 0);
-	if (!strcmp(argv[0], "pid"))
+	if (!strcmp(argv, "pid"))
 		work_queue(LPWORK, &_work_calib, (worker_t)&TSFMU::pid_trampoline, this, 0);
-	if (!strcmp(argv[0], "pwm")){
-		pwm_setpoint = strtol(argv[1], 0, 0);
-		work_queue(LPWORK, &_work_calib, (worker_t)&TSFMU::pwm_trampoline, this, 0);
-	}
-
-
-}
-
-void
-TSFMU::pwm_trampoline(void *arg){
-	TSFMU *dev = reinterpret_cast<TSFMU *>(arg);
-
-	dev->set_pwm();
-}
-
-void TSFMU::set_pwm(){
-	actuator_armed_s aa;
-
-	aa.armed = true;
-	aa.prearmed = true;
-	aa.ready_to_arm = true;
-	aa.lockdown = false;
-	aa.manual_lockdown = false;
-	aa.force_failsafe = false;
-	aa.in_esc_calibration_mode = false;
-
-
-	orb_advert_t handle = orb_advertise(ORB_ID(actuator_armed), &aa);
-	if (handle == nullptr) {
-		errx(1, "advertise failed 2");
-	}
-
-	orb_unadvertise(handle);
-	_is_calib = true;
-	usleep(4000000);
-
-	float pwm_outputs[4];
-	pwm_outputs[1] = -1.f;
-	pwm_outputs[0] = ((float)pwm_setpoint - 1500.f) / 500.f;
-
-	sem_wait(&_sem_timer_calib);
-	memcpy(_outputs_calib, pwm_outputs, sizeof(pwm_outputs));
-	sem_post(&_sem_timer_calib);
-
 }
 
 void
@@ -1902,7 +1819,7 @@ TSFMU::cycle()
 	bool updated = false;
 	orb_check(_armed_sub, &updated);
 
-	if (updated || force_param_update) {
+	if (updated) {
 		orb_copy(ORB_ID(actuator_armed), _armed_sub, &_armed);
 
 		/* Update the armed status and check that we're not locked down.
@@ -1945,14 +1862,6 @@ TSFMU::cycle()
 		if (param_handle != PARAM_INVALID) {
 			param_get(param_handle, &_mot_t_max);
 		}
-
-		param_handle = param_find("TS_RADS_CF");
-
-		if (param_handle != PARAM_INVALID) {
-			param_get(param_handle, &_rads_cutoff_freq);
-		}
-		_rads_filt_coeff = exp(-2*PI*_rads_cutoff_freq*0.001f);
-
 
 		// thrust to pwm modelling factor
 		param_handle = param_find("THR_MDL_FAC");
@@ -2929,8 +2838,6 @@ TSFMU::print_info()
 	printf("\n");
 
 	printf("esc_rads_delay: %.3f ms\n", (double) (_esc_rads_delay / 1000.f));
-
-	printf("pwm_setpoint: %d\n", pwm_setpoint);
 }
 
 namespace
@@ -3319,15 +3226,11 @@ tsfmu_main(int argc, char *argv[])
 
 	if (!strcmp(verb, "calibrate")){
 		if (argc < 3){
-			warnx("usage - tsfmu calibrate fit/pid/pwm");
+			warnx("usage - tsfmu calibrate fit/pid");
 			exit(0);
-		}else if (!strcmp(argv[2], "pwm"))
-			if(argc < 4){
-				warnx("usage - tsfmu calibrate pwm <pwm_setpoint>");
-				exit(0);
-			}
+		}
 
-		if(g_fmu != NULL) g_fmu->calibrate(&argv[2]);
+		if(g_fmu != NULL) g_fmu->calibrate(argv[2]);
 		exit(0);
 	}
 
