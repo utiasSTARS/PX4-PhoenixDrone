@@ -226,8 +226,8 @@ private:
 	volatile uint64_t _time_r[MED_FIL_ENTRY];
 	volatile uint64_t _timeDiff_l;
 	volatile uint64_t _timeDiff_r;
-	volatile float _timeDiff_l_fil;
-	volatile float _timeDiff_r_fil;
+	volatile uint64_t _timeDiff_l_fil;
+	volatile uint64_t _timeDiff_r_fil;
 	volatile float _rads_l;
 	volatile float _rads_r;
 	volatile float _rads_l_raw;
@@ -952,9 +952,9 @@ TSFMU::rads_task_main()
 				}
 
 
-				_rads_l = _timeDiff_l_fil > FLT_EPSILON ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
+				_rads_l = _timeDiff_l_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
 				_rads_l_raw = _timeDiff_l ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l) : 0.f;
-				_rads_r = _timeDiff_r_fil > FLT_EPSILON ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
+				_rads_r = _timeDiff_r_fil ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
 				_rads_r_raw = _timeDiff_r ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r) : 0.f;
 			}
 		}

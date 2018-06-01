@@ -205,12 +205,12 @@ private:
 AttitudeEstimatorQ::AttitudeEstimatorQ() :
 	_vel_prev(0, 0, 0),
 	_pos_acc(0, 0, 0),
-	_lp_accel_x(500.0f, 30.0f),
-	_lp_accel_y(500.0f, 30.0f),
-	_lp_accel_z(500.0f, 30.0f),
-	_lp_gyro_x(500.0f, 30.0f),
-	_lp_gyro_y(500.0f, 30.0f),
-	_lp_gyro_z(500.0f, 30.0f)
+	_lp_accel_x(250.0f, 30.0f),
+	_lp_accel_y(250.0f, 30.0f),
+	_lp_accel_z(250.0f, 30.0f),
+	_lp_gyro_x(250.0f, 30.0f),
+	_lp_gyro_y(250.0f, 30.0f),
+	_lp_gyro_z(250.0f, 30.0f)
 {
 	_params_handles.w_acc		= param_find("ATT_W_ACC");
 	_params_handles.w_mag		= param_find("ATT_W_MAG");
