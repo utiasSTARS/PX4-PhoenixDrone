@@ -190,8 +190,8 @@ TailsitterMixer::_report_mixer_info(){
 unsigned
 TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 {
-	float rads_left  = constrain(get_control(0, 0), 220, _mixer_info.rads_max);
-	float rads_right = constrain(get_control(0, 1), 220, _mixer_info.rads_max);
+	float rads_left  = constrain(get_control(0, 0), 0, _mixer_info.rads_max);
+	float rads_right = constrain(get_control(0, 1), 0, _mixer_info.rads_max);
 
 	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max);
 	float elv_right = constrain(get_control(0, 3), _mixer_info.deg_min, _mixer_info.deg_max);
@@ -244,6 +244,12 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 
 	_prev_outputs[0] = outputs[0];
 	_prev_outputs[1] = outputs[1];
+
+	if((rads_left+rads_right)/2 < 200){
+		clear_integral(0);
+		clear_integral(1);
+	}
+
 
 	return 6;
 }
