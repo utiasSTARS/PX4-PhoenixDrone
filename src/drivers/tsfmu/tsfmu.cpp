@@ -74,8 +74,9 @@
 #define RPM_CH_LEFT 2
 #define RPM_CH_RIGHT 3
 #define NUM_POLES 7
-#define NUM_SYNC_PER_CYCLE 3
-#define TIMER_PSC 2
+#define NUM_SYNC_PER_CYCLE 1
+#define TIMER_PSC 1
+#define CAPTURE_EDGE 2
 #define PI 3.14159f
 #define RADS_FILTER_CONSTANT 0.6f
 #define TIMEOUT_MS 200
@@ -597,8 +598,8 @@ TSFMU::init()
 	work_start();
 
 	/*Input Capture settings for reading motor RPM pulses */
-	up_input_capture_set(RPM_CH_LEFT, Both, 0, &capture_trampoline, this);
-	up_input_capture_set(RPM_CH_RIGHT, Both, 0, &capture_trampoline, this);
+	up_input_capture_set(RPM_CH_LEFT, Rising, 0, &capture_trampoline, this);
+	up_input_capture_set(RPM_CH_RIGHT, Rising, 0, &capture_trampoline, this);
 
 
 	return OK;
@@ -916,10 +917,12 @@ TSFMU::rads_task_main()
 				}
 
 
-				_rads_l = _timeDiff_l_fil > FLT_EPSILON ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
-				_rads_l_raw = _timeDiff_l ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l) : 0.f;
-				_rads_r = _timeDiff_r_fil > FLT_EPSILON ? TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
-				_rads_r_raw = _timeDiff_r ? TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r) : 0.f;
+
+				_rads_l = _timeDiff_l_fil  > FLT_EPSILON ? CAPTURE_EDGE * TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l_fil) : 0.f;
+				_rads_l_raw = _timeDiff_l ? CAPTURE_EDGE * TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_l) : 0.f;
+				_rads_r = _timeDiff_r_fil  > FLT_EPSILON ? CAPTURE_EDGE * TIMER_PSC * PI * 1000000.f / (float)(NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r_fil) : 0.f;
+				_rads_r_raw = _timeDiff_r ? CAPTURE_EDGE * TIMER_PSC * PI * 1000000.f / (float) (NUM_POLES * NUM_SYNC_PER_CYCLE * _timeDiff_r) : 0.f;
+
 			}
 		}
 		/* timeout */
