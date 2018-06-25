@@ -1192,6 +1192,30 @@ TSFMU::fit_curve(){
 			(double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
 			(double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
 
+	  char buffer[100] = {0};
+
+	  fd = fopen("/fs/microsd/rotor_calib.txt", "a");
+	  int buffer_len;
+	  int bytes_written;
+
+	  if (fd != NULL) {
+	    sprintf(buffer,"pwm-omega fit results,\n L: %.10f, %.10f, %.10f\n R: %.10f, %.10f, %.10f\n",
+	        (double) coeff_l(0),(double) coeff_l(1),(double) coeff_l(2),
+	        (double) coeff_r(0),(double) coeff_r(1),(double) coeff_r(2));
+	    buffer_len = strlen(buffer) + 1;
+	    bytes_written = fwrite(buffer, 1, buffer_len, fd);
+	    if (bytes_written != buffer_len) {
+	      warn("fwrite() %d bytes returned less than expected %d", buffer_len, bytes_written);
+	    }
+
+	    fflush(fd);
+	    fclose(fd);
+
+	  }
+	  else{
+	    warn("Can not open file!");
+	  }
+
 	param_t param_handle;
 
 
