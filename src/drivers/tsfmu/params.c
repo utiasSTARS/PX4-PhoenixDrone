@@ -24,14 +24,14 @@ PARAM_DEFINE_FLOAT(TS_PWM_TRIM_R, 0);
  *
  * @group TS
  */
-PARAM_DEFINE_FLOAT(TS_MOT_P, 0.02);
+PARAM_DEFINE_FLOAT(TS_MOT_P, 0.065);
 
 /**
  * Motor PI controller I gain.
  *
  * @group TS
  */
-PARAM_DEFINE_FLOAT(TS_MOT_I, 0.037583);
+PARAM_DEFINE_FLOAT(TS_MOT_I, 0.2);
 
 /**
  * Channel 0 Motor PI controller Feedforward gain.
