@@ -17,7 +17,7 @@
     <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/apriltag"/>
 
     <arg name="headless" default="false"/>
-    <arg name="gui" default="true"/>
+    <arg name="gui" default="false"/>
     <arg name="ns" default="/"/>
     <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
 
@@ -54,11 +54,12 @@
         <arg name="pluginlists_yaml" value="$(arg pluginlists_yaml)" />
         <arg name="config_yaml" value="$(arg config_yaml)" />
     </include>
-
-<!--     <node pkg="mavros" type="offb_node" name="offb_node" output="screen" />  -->
     
-    <include file="$(find apriltags_ros)/launch/example.launch" />
+
+    <include file="$(find apriltags2_ros)/launch/continuous_detection.launch" />
     <include file="$(find odometry)/launch/odometry.launch" />
+    <node pkg="rviz" type="rviz" name="rviz"/>
+
 </launch>
 
 <!-- vim: set et ft=xml fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->
