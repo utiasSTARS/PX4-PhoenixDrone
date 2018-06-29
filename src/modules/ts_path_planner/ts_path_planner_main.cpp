@@ -45,8 +45,10 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_position_setpoint_pub(nullptr),
 		_params_sub(-1),
 		_local_pos_sub(-1),
+		_position_setpoint_step_sub(-1),
 		_control_mode{},
 		_pos_sp_triplet{},
+		_pos_sp_triplet_step{},
 		_local_pos{},
 		_work{},
 		_looptimer(2e4)
@@ -123,18 +125,21 @@ TailsitterPathPlanner::task_main()
 {
 	reset_control_mode();
 	_params_sub = orb_subscribe(ORB_ID(parameter_update));
+	_position_setpoint_step_sub = orb_subscribe(ORB_ID(position_setpoint_triplet_step));
 	_local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
 	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, 0);
 	while(!_task_should_exit){
 		_looptimer.wait();
 		poll_subscriptions();
+
+		// Update the set point
 		if (_setpoint_updated){
 
 				float dt = (hrt_absolute_time() - _waypoint.start_time)/1e6f;
 				math::Vector<3> next_point = _waypoint.start_point + _waypoint.direction * dt * _waypoint.speed;
 				math::Vector<3> velocity = _waypoint.velocity;
 
-				if((next_point - _waypoint.end_point).length()< 0.05f){
+				if((next_point - _waypoint.end_point).length() < 0.05f){
 					_setpoint_updated = false;
 					next_point = _waypoint.end_point;
 					velocity.zero();
@@ -206,7 +211,7 @@ void
 TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 
 	if(argc < 2){
-		warnx("usage: ts_path_planner pub {att|acc}");
+		warnx("usage: ts_path_planner pub {att|pos}");
 	}
 	else{
 		if(!strcmp(argv[0], "acc")){
@@ -258,7 +263,7 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 			math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
 			direction.normalize();
 			_waypoint.direction = direction;
-			_waypoint.yaw = strtof(argv[4], 0) / 180.f * 3.14f;
+			_waypoint.yaw = strtof(argv[4], 0) / 180.f * 3.1415926f;
 			math::Vector<3> velocity = direction * _params.cruise_speed;
 
 			for (int i=0; i<3; i++){
@@ -336,12 +341,48 @@ TailsitterPathPlanner::poll_subscriptions()
 		orb_copy(ORB_ID(vehicle_local_position), _local_pos_sub, &_local_pos);
 	}
 
+	orb_check(_position_setpoint_step_sub, &updated);
+	if (updated) {
+		orb_copy(ORB_ID(position_setpoint_triplet_step), _position_setpoint_step_sub, &_pos_sp_triplet_step);
+
+		if (_control_mode.ignore_position) {
+			_control_mode.ignore_position = false;
+			_control_mode.ignore_acceleration_force = true;
+		}
+
+		_waypoint.start_point(0) = _local_pos.x;
+		_waypoint.start_point(1) = _local_pos.y;
+		_waypoint.start_point(2) = _local_pos.z;
+		_waypoint.end_point(0) = _pos_sp_triplet_step.current.x;
+		_waypoint.end_point(1) = _pos_sp_triplet_step.current.y;
+		_waypoint.end_point(2) = _pos_sp_triplet_step.current.z;
+		math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
+		direction.normalize();
+		_waypoint.direction = direction;
+		_waypoint.yaw = _pos_sp_triplet_step.current.yaw;
+		math::Vector<3> velocity = direction * _params.cruise_speed;
+
+		// Saturate the maximum velocity in all directions
+		for (int i=0; i<3; i++){
+			if (velocity(i) > _params.cruise_speed_max(i) || velocity(i) < -_params.cruise_speed_max(i)){
+				float scale = _params.cruise_speed_max(i) / velocity(i);
+				scale = scale > 0 ? scale:-scale;
+				velocity = velocity * scale;
+			}
+		}
+		_waypoint.speed = velocity.length();
+		_waypoint.velocity = velocity;
+
+		usleep(1e6);
+		_waypoint.start_time = hrt_absolute_time();
+		_setpoint_updated = true;
+	}
 }
 
 int ts_path_planner_main(int argc, char *argv[])
 {
 	if (argc < 2) {
-		warnx("usage: ts_path_planner {start|stop|status|set}");
+		warnx("usage: ts_path_planner {start|stop|status|pub|control}");
 		return 1;
 	}
 
@@ -401,8 +442,7 @@ int ts_path_planner_main(int argc, char *argv[])
 		}
 		else{
 			ts_path_planner::g_planner->update_pos_setpoint(argc-2, argv+2);
-
-			}
+		}
 
 		return 0;
 	}

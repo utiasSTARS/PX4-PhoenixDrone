@@ -13,6 +13,7 @@
 #include <lib/mathlib/mathlib.h>
 #include <uORB/topics/offboard_control_mode.h>
 #include <uORB/topics/position_setpoint_triplet.h>
+#include <uORB/topics/position_setpoint_triplet_step.h>
 #include <uORB/topics/position_setpoint.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/parameter_update.h>
@@ -37,12 +38,15 @@ private:
 
 	orb_advert_t _v_control_mode_pub;
 	orb_advert_t _position_setpoint_pub;
-
+	
 	int	_params_sub;
 	int _local_pos_sub;
-
+	int _position_setpoint_step_sub;
+	
 	struct offboard_control_mode_s		_control_mode;
+
 	struct position_setpoint_triplet_s 	_pos_sp_triplet;
+	struct position_setpoint_triplet_step_s	_pos_sp_triplet_step;
 	struct vehicle_local_position_s		_local_pos;
 	struct work_s						_work;
 

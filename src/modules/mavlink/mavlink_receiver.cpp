@@ -867,7 +867,7 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 
 				} else {
 					/* It's not a pure force setpoint: publish to setpoint triplet  topic */
-					struct position_setpoint_triplet_s pos_sp_triplet = {};
+					struct position_setpoint_triplet_step_s pos_sp_triplet = {};
 					pos_sp_triplet.timestamp = hrt_absolute_time();
 					pos_sp_triplet.previous.valid = false;
 					pos_sp_triplet.next.valid = false;
@@ -957,11 +957,11 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 					//XXX handle global pos setpoints (different MAV frames)
 
 					if (_pos_sp_triplet_pub == nullptr) {
-						_pos_sp_triplet_pub = orb_advertise(ORB_ID(position_setpoint_triplet),
+						_pos_sp_triplet_pub = orb_advertise(ORB_ID(position_setpoint_triplet_step),
 										    &pos_sp_triplet);
 
 					} else {
-						orb_publish(ORB_ID(position_setpoint_triplet), _pos_sp_triplet_pub,
+						orb_publish(ORB_ID(position_setpoint_triplet_step), _pos_sp_triplet_pub,
 							    &pos_sp_triplet);
 					}
 

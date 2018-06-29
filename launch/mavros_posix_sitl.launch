@@ -55,9 +55,10 @@
         <arg name="config_yaml" value="$(arg config_yaml)" />
     </include>
 
-    <node pkg="mavros" type="offb_node" name="offb_node" />
+<!--     <node pkg="mavros" type="offb_node" name="offb_node" output="screen" />  -->
     
     <include file="$(find apriltags_ros)/launch/example.launch" />
+    <include file="$(find odometry)/launch/odometry.launch" />
 </launch>
 
 <!-- vim: set et ft=xml fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->

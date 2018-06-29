@@ -1,0 +1,1 @@
+/home/vuwij/PX4-FlightX/devel/.private/catkin_tools_prebuild/setup.zsh
