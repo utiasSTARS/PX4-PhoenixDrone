@@ -138,7 +138,7 @@ PARAM_DEFINE_FLOAT(TS_ROLL_I, 0f);
  * @increment 0.01
  * @group Tailsitter Attitude Control
  */
-PARAM_DEFINE_FLOAT(TS_ROLL_D, 0f);
+PARAM_DEFINE_FLOAT(TS_ROLL_D, 0.7f);
 /**
  * TS Pitch Integral Limit
  *

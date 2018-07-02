@@ -147,6 +147,8 @@ private:
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
 
+
+	math::Vector<3>		_e_R_prev;      /**< previous attitude error in screw-axis convention */
 	math::Vector<3>		_rates_prev;	/**< angular rates on previous step */
 	math::Vector<3>		_rates_sp_prev; /**< previous rates setpoint */
 	math::Vector<3>		_rates_sp;		/**< angular rates setpoint */
@@ -365,6 +367,7 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_params.att_max.zero();
 	_params.rate_max.zero();
 	_params.momt_const.zero();
+	_e_R_prev.zero();
 	_rates_prev.zero();
 	_rates_sp.zero();
 	_rates_sp_prev.zero();
@@ -470,7 +473,7 @@ TailsitterAttitudeControl::parameters_update()
 	param_get(_params_handles.roll_i, &v);
 	_params.att_i(0) = v;
 	param_get(_params_handles.roll_d, &v);
-	_params.att_d(0) = v * (ATTITUDE_TC_DEFAULT / roll_tc);
+	_params.att_d(0) = v;
 	param_get(_params_handles.roll_integ_lim, &v);
 	_params.att_int_lim(0) = v;
 	param_get(_params_handles.roll_rate_tc, &v);
@@ -748,7 +751,17 @@ TailsitterAttitudeControl::control_attitude(float dt)
 	}
 
 	/* calculate angular rates setpoint */
-	_rates_sp = _params.att_p.emult(e_R);
+	/* current body angular rates */
+	math::Vector<3> rates;
+	rates(0) = _ctrl_state.roll_rate;
+	rates(1) = _ctrl_state.pitch_rate;
+	rates(2) = _ctrl_state.yaw_rate;
+
+	//math::Vector<3> e_R_d = (e_R - _e_R_prev)/dt;
+
+	_rates_sp = _params.att_p.emult(e_R);// - _params.att_d.emult(rates);
+
+	//_e_R_prev = e_R;
 
 	/* limit rates */
 	for (int i = 0 ; i < 3; i++){
@@ -797,11 +810,16 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
+	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
 
-	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc);
+	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc);// + (_J * rates_d).emult(_params.att_d);
 	math::Vector<3> att_control2 = rates % (_J * rates);
 
+	_rates_prev = rates;
+
 	_att_control = att_control1 + att_control2;
+
+
 
 	for (int i=0; i<3; i++){
 		float diff = _att_control(i) - _params.rate_max(i);
