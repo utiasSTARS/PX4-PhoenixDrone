@@ -357,7 +357,7 @@ TailsitterPathPlanner::poll_subscriptions()
 		_waypoint.end_point(1) = _pos_sp_triplet_step.current.y;
 		_waypoint.end_point(2) = _pos_sp_triplet_step.current.z;
 		math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
-		direction.normalize();
+		// direction.normalize();
 		_waypoint.direction = direction;
 		_waypoint.yaw = _pos_sp_triplet_step.current.yaw;
 		math::Vector<3> velocity = direction * _params.cruise_speed;
