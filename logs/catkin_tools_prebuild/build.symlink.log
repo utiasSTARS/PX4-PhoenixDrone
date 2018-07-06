@@ -1,8 +1,0 @@
-Symlinking /home/vuwij/PX4-FlightX/devel/./_setup_util.py
-Symlinking /home/vuwij/PX4-FlightX/devel/./setup.zsh
-Symlinking /home/vuwij/PX4-FlightX/devel/./setup.bash
-Symlinking /home/vuwij/PX4-FlightX/devel/./env.sh
-Symlinking /home/vuwij/PX4-FlightX/devel/./setup.sh
-Symlinking /home/vuwij/PX4-FlightX/devel/share/catkin_tools_prebuild/cmake/catkin_tools_prebuildConfig.cmake
-Symlinking /home/vuwij/PX4-FlightX/devel/share/catkin_tools_prebuild/cmake/catkin_tools_prebuildConfig-version.cmake
-Symlinking /home/vuwij/PX4-FlightX/devel/lib/pkgconfig/catkin_tools_prebuild.pc
