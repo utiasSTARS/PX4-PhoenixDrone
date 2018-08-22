@@ -186,6 +186,7 @@ private:
 	bool		_inited = false;
 	bool		_data_good = false;
 	bool		_ext_hdg_good = false;
+	bool		_mocap_hdg_init = false;
 
 	orb_advert_t	_mavlink_log_pub = nullptr;
 
@@ -386,7 +387,13 @@ void AttitudeEstimatorQ::task_main()
 		if (mocap_updated) {
 			orb_copy(ORB_ID(att_pos_mocap), _mocap_sub, &_mocap);
 			math::Quaternion q(_mocap.q);
-			//_q = q;
+
+			// overwrite mocap attitude once to correct to mocap heading
+			if (!_mocap_hdg_init) {
+				_q = q;
+				_mocap_hdg_init = true;
+			}
+
 			math::Matrix<3, 3> Rmoc = q.to_dcm();
 
 			math::Vector<3> v(1.0f, 0.0f, 0.4f);
