@@ -489,7 +489,7 @@ TailsitterAttitudeControl::parameters_update()
 	param_get(_params_handles.pitch_i, &v);
 	_params.att_i(1) = v;
 	param_get(_params_handles.pitch_d, &v);
-	_params.att_d(1) = v * (ATTITUDE_TC_DEFAULT / pitch_tc);
+	_params.att_d(1) = v;
 	param_get(_params_handles.pitch_integ_lim, &v);
 	_params.att_int_lim(1) = v;
 	param_get(_params_handles.pitch_rate_tc, &v);
@@ -505,7 +505,7 @@ TailsitterAttitudeControl::parameters_update()
 	param_get(_params_handles.yaw_i, &v);
 	_params.att_i(2) = v;
 	param_get(_params_handles.yaw_d, &v);
-	_params.att_d(2) = v * (ATTITUDE_TC_DEFAULT / yaw_tc);
+	_params.att_d(2) = v;
 	param_get(_params_handles.yaw_integ_lim, &v);
 	_params.att_int_lim(2) = v;
 	param_get(_params_handles.yaw_rate_tc, &v);
@@ -759,7 +759,7 @@ TailsitterAttitudeControl::control_attitude(float dt)
 
 	//math::Vector<3> e_R_d = (e_R - _e_R_prev)/dt;
 
-	_rates_sp = _params.att_p.emult(e_R);// - _params.att_d.emult(rates);
+	_rates_sp = _params.att_p.emult(e_R) - _params.att_d.emult(rates);
 
 	//_e_R_prev = e_R;
 
@@ -808,6 +808,15 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 	rates(1) = _ctrl_state.pitch_rate;
 	rates(2) = _ctrl_state.yaw_rate;
 
+	math::Vector<3> att_control_ff;
+	att_control_ff(0) = 0;
+	att_control_ff(1) = _rates_sp(1);
+	att_control_ff(2) = 0;
+
+
+	/* hot fix - experimental!! */
+	_rates_sp(1) = 0;
+
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
 	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
@@ -817,7 +826,7 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 
 	_rates_prev = rates;
 
-	_att_control = att_control1 + att_control2;
+	_att_control = att_control1 + att_control2 + att_control_ff;
 
 
 
