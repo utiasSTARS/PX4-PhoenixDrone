@@ -149,6 +149,7 @@ private:
 
 
 	math::Vector<3>		_e_R_prev;      /**< previous attitude error in screw-axis convention */
+	math::Vector<3>		_e_R_int;       /**< attitude error integral */
 	math::Vector<3>		_rates_prev;	/**< angular rates on previous step */
 	math::Vector<3>		_rates_sp_prev; /**< previous rates setpoint */
 	math::Vector<3>		_rates_sp;		/**< angular rates setpoint */
@@ -166,6 +167,8 @@ private:
 		param_t roll_integ_lim;
 		param_t roll_tc;
 		param_t roll_rate_tc;
+		param_t roll_rate_i;
+		param_t roll_rate_integ_lim;
 
 		param_t pitch_p;
 		param_t pitch_i;
@@ -173,6 +176,8 @@ private:
 		param_t pitch_integ_lim;
 		param_t pitch_tc;
 		param_t pitch_rate_tc;
+		param_t pitch_rate_i;
+		param_t pitch_rate_integ_lim;
 
 		param_t tpa_breakpoint_p;
 		param_t tpa_breakpoint_i;
@@ -218,8 +223,10 @@ private:
 		math::Vector<3> att_int_lim;			/**< integrator state limit for rate loop */
 		math::Vector<3> att_tc;
 		math::Vector<3> rate_tc;				/**< time constant for angular rate error */
+		math::Vector<3> rate_i;                 /**< rate integral gain*/
 		math::Vector<3> att_max;
 		math::Vector<3> rate_max;
+		math::Vector<3> rate_int_lim;			/**< rate integral limit*/
 		math::Vector<3> momt_const;				/** Momentum constants roll, pith, yaw **/
 
 		float tpa_breakpoint_p;				/**< Throttle PID Attenuation breakpoint */
@@ -372,6 +379,7 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_rates_sp.zero();
 	_rates_sp_prev.zero();
 	_rates_int.zero();
+	_e_R_int.zero();
 	_thrust_sp = 0.0f;
 	_att_control.zero();
 
@@ -384,8 +392,10 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_params_handles.roll_integ_lim	=	param_find("TS_ROLL_INT_LIM");
 	_params_handles.roll_tc			= 	param_find("TS_ROLL_TC");
 	_params_handles.roll_rate_tc	=	param_find("TS_ROLL_RATE_TC");
+	_params_handles.roll_rate_i		=   param_find("TS_ROLL_RATE_I");
 	_params_handles.roll_max		=	param_find("TS_ROLL_MAX");
 	_params_handles.roll_rate_max	= 	param_find("TS_ROLL_RATE_MAX");
+	_params_handles.roll_rate_integ_lim 	=   param_find("TS_RRATE_INT_LIM");
 
 	_params_handles.pitch_p			= 	param_find("TS_PITCH_P");
 	_params_handles.pitch_i			=	param_find("TS_PITCH_I");
@@ -393,8 +403,10 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_params_handles.pitch_integ_lim	=	param_find("TS_PITCH_INT_LIM");
 	_params_handles.pitch_tc		= 	param_find("TS_PITCH_TC");
 	_params_handles.pitch_rate_tc	=	param_find("TS_PITCH_RATE_TC");
+	_params_handles.pitch_rate_i	=   param_find("TS_PITCH_RATE_I");
 	_params_handles.pitch_max		=	param_find("TS_PITCH_MAX");
 	_params_handles.pitch_rate_max	= 	param_find("TS_PITCH_RATE_MX");
+	_params_handles.pitch_rate_integ_lim 	=   param_find("TS_PRATE_INT_LIM");
 
 	_params_handles.yaw_p			= 	param_find("TS_YAW_P");
 	_params_handles.yaw_i			=	param_find("TS_YAW_I");
@@ -478,10 +490,15 @@ TailsitterAttitudeControl::parameters_update()
 	_params.att_int_lim(0) = v;
 	param_get(_params_handles.roll_rate_tc, &v);
 	_params.rate_tc(0) = v;
+	param_get(_params_handles.roll_rate_i, &v);
+	_params.rate_i(0) = v;
 	param_get(_params_handles.roll_max, &v);
 	_params.att_max(0) = v;
 	param_get(_params_handles.roll_rate_max, &v);
 	_params.rate_max(0) = v;
+	param_get(_params_handles.roll_rate_integ_lim, &v);
+	_params.rate_int_lim(0) = v;
+
 
 	/* pitch gains */
 	param_get(_params_handles.pitch_p, &v);
@@ -494,10 +511,14 @@ TailsitterAttitudeControl::parameters_update()
 	_params.att_int_lim(1) = v;
 	param_get(_params_handles.pitch_rate_tc, &v);
 	_params.rate_tc(1) = v;
+	param_get(_params_handles.pitch_rate_i, &v);
+	_params.rate_i(1) = v;
 	param_get(_params_handles.pitch_max, &v);
 	_params.att_max(1) = v;
 	param_get(_params_handles.pitch_rate_max, &v);
 	_params.rate_max(1) = v;
+	param_get(_params_handles.pitch_rate_integ_lim, &v);
+	_params.rate_int_lim(1) = v;
 
 	/* yaw gains */
 	param_get(_params_handles.yaw_p, &v);
@@ -759,7 +780,14 @@ TailsitterAttitudeControl::control_attitude(float dt)
 
 	//math::Vector<3> e_R_d = (e_R - _e_R_prev)/dt;
 
-	_rates_sp = _params.att_p.emult(e_R);// - _params.att_d.emult(rates);
+	_e_R_int = _e_R_int + e_R * dt;
+
+	/* limit rates */
+	for (int i = 0 ; i < 3; i++){
+		_e_R_int(i) = math::constrain(_e_R_int(i), -_params.att_int_lim(i), _params.att_int_lim(i));
+	}
+
+	_rates_sp = _params.att_p.emult(e_R) - _params.att_d.emult(rates) + _params.att_i.emult(_e_R_int);
 
 	//_e_R_prev = e_R;
 
@@ -812,7 +840,13 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 	math::Vector<3> rates_err = _rates_sp - rates;
 	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
 
-	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc);// + (_J * rates_d).emult(_params.att_d);
+	_rates_int = _rates_int +  rates_err * dt;
+	/* limit rates integral */
+	for (int i = 0 ; i < 3; i++){
+		_rates_int(i) = math::constrain(_rates_int(i), -_params.rate_int_lim(i), _params.rate_int_lim(i));
+	}
+
+	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc) + (_J * _params.rate_i).emult(_rates_int);// + (_J * rates_d).emult(_params.att_d);
 	math::Vector<3> att_control2 = rates % (_J * rates);
 
 	_rates_prev = rates;
@@ -1109,6 +1143,7 @@ TailsitterAttitudeControl::task_main()
 					_rates_int.zero();
 					_thrust_sp = 0.0f;
 					_att_control.zero();
+					_e_R_int.zero();
 
 
 					/* publish actuator controls */

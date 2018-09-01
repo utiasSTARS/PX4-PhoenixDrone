@@ -79,6 +79,18 @@ PARAM_DEFINE_FLOAT(TS_PITCH_TC, 0.2f);
  */
 PARAM_DEFINE_FLOAT(TS_PITCH_RATE_TC, 0.06f);
 /**
+ * TS Pitch Rate I Gain
+ *
+ * Attitude Rate PID (ROll)
+ *
+ * @min 0.0
+ * @max 100.0
+ * @decimal 5
+ * @increment 0.01
+ * @group Tailsitter Attitude Control
+ */
+PARAM_DEFINE_FLOAT(TS_PITCH_RATE_I, 0.0f);
+/**
  * TS Roll Maximum (Deg)
  *
  * Attitude PID (ROll)
@@ -102,9 +114,20 @@ PARAM_DEFINE_FLOAT(TS_PITCH_MAX, 60.f);
  * @group Tailsitter Attitude Control
  */
 PARAM_DEFINE_FLOAT(TS_PITCH_RATE_MX, 100.f);
-
 /**
- * TS Pitch P Gain
+ * TS Pitch Rate Integral Maximum (Rads)
+ *
+ * Attitude PID (Pitch)
+ *
+ * @min 0.0
+ * @max 100.0
+ * @decimal 2
+ * @increment 0.1
+ * @group Tailsitter Attitude Control
+ */
+PARAM_DEFINE_FLOAT(TS_PRATE_INT_LIM, 0.0f);
+/**
+ * TS Roll P Gain
  *
  * Attitude PID (Pitch)
  *
@@ -164,9 +187,9 @@ PARAM_DEFINE_FLOAT(TS_ROLL_INT_LIM, 5000f);
  */
 PARAM_DEFINE_FLOAT(TS_ROLL_TC, 0.2f);
 /**
- * TS Pitch Rate Time Constant
+ * TS Roll Rate Time Constant
  *
- * Attitude Rate PID (Pitch)
+ * Attitude Rate PID (Roll)
  *
  * @min 0.0
  * @max 100.0
@@ -175,6 +198,18 @@ PARAM_DEFINE_FLOAT(TS_ROLL_TC, 0.2f);
  * @group Tailsitter Attitude Control
  */
 PARAM_DEFINE_FLOAT(TS_ROLL_RATE_TC, 0.04f);
+/**
+ * TS Roll Rate I Gain
+ *
+ * Attitude Rate PID (Roll)
+ *
+ * @min 0.0
+ * @max 100.0
+ * @decimal 2
+ * @increment 0.5
+ * @group Tailsitter Attitude Control
+ */
+PARAM_DEFINE_FLOAT(TS_ROLL_RATE_I, 10.f);
 /**
  * TS Pitch Maximum (Deg)
  *
@@ -199,6 +234,18 @@ PARAM_DEFINE_FLOAT(TS_ROLL_MAX, 60.f);
  * @group Tailsitter Attitude Control
  */
 PARAM_DEFINE_FLOAT(TS_ROLL_RATE_MAX, 40.f);
+/**
+ * TS Roll Rate Integral Maximum (Rads)
+ *
+ * Attitude PID (Roll)
+ *
+ * @min 0.0
+ * @max 100.0
+ * @decimal 2
+ * @increment 0.1
+ * @group Tailsitter Attitude Control
+ */
+PARAM_DEFINE_FLOAT(TS_RRATE_INT_LIM, 0.3f);
 /**
  * TS Yaw P Gain
  *
