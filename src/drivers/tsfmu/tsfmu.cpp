@@ -452,6 +452,14 @@ TSFMU::TSFMU() :
 		param_get(param_handle, &_trim_pwm[5]);
 	}
 
+	float servo_slew_rate;
+
+	param_handle = param_find("SERVO_SLEW_RATE");
+
+	if (param_handle != PARAM_INVALID) {
+		param_get(param_handle, &servo_slew_rate);
+	}
+
 	_num_disarmed_set = 4;
 	_num_failsafe_set = 4;
 
@@ -478,6 +486,7 @@ TSFMU::TSFMU() :
 	_mixer_info.control_interval = SCHEDULE_INTERVAL;
 	_mixer_info.integral_lim = 50.f;
 	_mixer_info.calib_volt = 12.52f;
+	_mixer_info.servo_slew = servo_slew_rate;
 
 
 	_ts_mixer = new TailsitterMixer(ts_control_callback, (uintptr_t)_ts_controls, &_mixer_info);

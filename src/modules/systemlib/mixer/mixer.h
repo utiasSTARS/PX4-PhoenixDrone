@@ -712,6 +712,7 @@ struct mixer_ts_s {
 	float				integral_lim;
 	int					control_interval; /*control intervals(us) for sanity check*/
 	float				calib_volt; /*Voltage across motor during calibration*/
+	float 				servo_slew; /*Elevon deflection slew rate*/
 };
 
 /**
@@ -812,6 +813,7 @@ private:
 	bool					_curr_omegas_valid;
 	sem_t					_sem_mixer;
 	float					_prev_outputs[2];
+	float 					_prev_elv[2];
 
 	void 					_rotor_control(float dt, float* omega_desired, float** pwm_outputs);
 	void					_report_mixer_info(void);

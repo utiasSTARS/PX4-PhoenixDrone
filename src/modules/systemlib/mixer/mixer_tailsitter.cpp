@@ -64,8 +64,8 @@ TailsitterMixer::TailsitterMixer(ControlCallback control_cb,
 				_curr_omegas(0,0),
 				_curr_omegas_valid(false),
 				_sem_mixer{0},
-				_prev_outputs{0}
-
+				_prev_outputs{0},
+				_prev_elv{0}
 {
 }
 
@@ -196,6 +196,8 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	float elv_left  = constrain(get_control(0, 2), _mixer_info.deg_min, _mixer_info.deg_max);
 	float elv_right = constrain(get_control(0, 3), _mixer_info.deg_min, _mixer_info.deg_max);
 
+
+
 	// replace static mapping with a pi controller
 	/*
 	float mot_left  = _mixer_info.k_w2 * rads_left * rads_left
@@ -206,7 +208,7 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	*/
 	float mot_left = -1.f;
 	float mot_right = -1.f;
-	float dt;
+	float dt = 0.f;
 	if(!_rotor_controller_init){
 		printf("Rotor controller not initialized!");
 	}
@@ -231,6 +233,13 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 		}
 	}
 
+	//slew rate constraint to elevon angles to avoid 12.5hz oscillation
+	elv_left = constrain(elv_left, _prev_elv[0] - _mixer_info.servo_slew * dt, _prev_elv[0] + _mixer_info.servo_slew * dt);
+	elv_right = constrain(elv_right, _prev_elv[1] - _mixer_info.servo_slew * dt, _prev_elv[1] + _mixer_info.servo_slew * dt);
+
+	_prev_elv[0] = elv_left;
+	_prev_elv[1] = elv_right;
+
 	//printf("%.2f, %.2f\n", (double) mot_left, (double) mot_right);
 	outputs[0] = mot_left;
 	outputs[1] = mot_right;
@@ -241,6 +250,8 @@ TailsitterMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 	//Elevon deflections are linear, just normalize between -1, 1
 	outputs[4] = normalize(elv_left , _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
 	outputs[5] = -normalize(elv_right, _mixer_info.deg_min, _mixer_info.deg_max, -1.f, 1.f);
+
+
 
 	_prev_outputs[0] = outputs[0];
 	_prev_outputs[1] = outputs[1];
