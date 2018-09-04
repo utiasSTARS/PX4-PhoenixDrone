@@ -100,6 +100,7 @@ private:
 	int		_armed_sub;				/**< arming status subscription */
 	int 	_motor_limits_sub;		/**< motor limits subscription */
 	int 	_battery_status_sub;	/**< battery status subscription */
+	int 	_v_status_sub;     		/**< vehicle status subscription */
 
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
@@ -125,6 +126,7 @@ private:
 	struct battery_status_s				_battery_status;	/**< battery status */
 	struct actuator_outputs_s			_actuator_outputs;  /**< actuator outputs(posix) */
 	struct ts_actuator_controls_s		_ts_actuator_controls; /**< actuator outputs(nuttx)*/
+	struct vehicle_status_s 			_v_status; 			/**< vehicle status */
 	struct debug_key_value_s			_dbg_tupple;		/**< debug tupple */
 
 	TailsitterRateControl*	_ts_rate_control;
@@ -302,6 +304,8 @@ private:
 	 * Check for battery status updates.
 	 */
 	void		battery_status_poll();
+
+	void 		vehicle_status_poll();
 
 	void 		publish_debug_tupple(int8_t *key, float value);
 
@@ -670,6 +674,18 @@ TailsitterAttitudeControl::battery_status_poll()
 }
 
 void
+TailsitterAttitudeControl::vehicle_status_poll()
+{
+	/* check if there is a new message */
+	bool updated;
+	orb_check(_v_status_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(vehicle_status), _v_status_sub, &_v_status);
+	}
+}
+
+void
 TailsitterAttitudeControl::publish_debug_tupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
@@ -846,6 +862,10 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 		_rates_int(i) = math::constrain(_rates_int(i), -_params.rate_int_lim(i), _params.rate_int_lim(i));
 	}
 
+	if (_v_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF){
+		_rates_int.zero();
+	}
+
 	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc) + (_J * _params.rate_i).emult(_rates_int);// + (_J * rates_d).emult(_params.att_d);
 	math::Vector<3> att_control2 = rates % (_J * rates);
 
@@ -935,6 +955,7 @@ TailsitterAttitudeControl::task_main()
 	_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 	_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
 	_battery_status_sub = orb_subscribe(ORB_ID(battery_status));
+	_v_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 
 	/* Topic id */
 	_rates_sp_id = ORB_ID(vehicle_rates_setpoint);
@@ -992,6 +1013,7 @@ TailsitterAttitudeControl::task_main()
 			vehicle_manual_poll();
 			vehicle_motor_limits_poll();
 			battery_status_poll();
+			vehicle_status_poll();
 
 			if (_v_control_mode.flag_control_attitude_enabled) {
 
