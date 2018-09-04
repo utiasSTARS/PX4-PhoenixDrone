@@ -140,6 +140,7 @@ TailsitterPathPlanner::task_main()
 					velocity.zero();
 				}
 
+				_pos_sp_triplet.timestamp = hrt_absolute_time();
 				_pos_sp_triplet.previous = _pos_sp_triplet.current;
 				_pos_sp_triplet.current.valid = true;
 				_pos_sp_triplet.current.position_valid = true;
