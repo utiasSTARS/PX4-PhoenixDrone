@@ -66,8 +66,8 @@ void TailsitterRateControl::mix(float fa, math::Vector<3> momentum_ref, float* a
 		if (i < 2){
 			if(outputs(i) < 0){
 				outputs(i) = 0;
-				warnx("Negative omeg^2");
-				warnx("fa: %f, momentum_ref: %f, %f, %f\n", (double) fa, (double) momentum_ref(0), (double) momentum_ref(1), (double) momentum_ref(2));
+				//warnx("Negative omeg^2");
+				//warnx("fa: %f, momentum_ref: %f, %f, %f\n", (double) fa, (double) momentum_ref(0), (double) momentum_ref(1), (double) momentum_ref(2));
 			}
 
 			outputs(i) = sqrt(outputs(i));
