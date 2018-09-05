@@ -15,6 +15,7 @@
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/position_setpoint.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/parameter_update.h>
 #include <platforms/px4_workqueue.h>
 #include <lib/LoopTimer/LoopTimer.h>
@@ -40,10 +41,12 @@ private:
 
 	int	_params_sub;
 	int _local_pos_sub;
+	int _v_lpos_sp_sub;
 
 	struct offboard_control_mode_s		_control_mode;
 	struct position_setpoint_triplet_s 	_pos_sp_triplet;
 	struct vehicle_local_position_s		_local_pos;
+	struct vehicle_local_position_setpoint_s _local_pos_sp;
 	struct work_s						_work;
 
 	struct{

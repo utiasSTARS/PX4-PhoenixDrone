@@ -45,9 +45,11 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_position_setpoint_pub(nullptr),
 		_params_sub(-1),
 		_local_pos_sub(-1),
+		_v_lpos_sp_sub(-1),
 		_control_mode{},
 		_pos_sp_triplet{},
 		_local_pos{},
+		_local_pos_sp{},
 		_work{},
 		_looptimer(2e4)
 {
@@ -124,6 +126,7 @@ TailsitterPathPlanner::task_main()
 	reset_control_mode();
 	_params_sub = orb_subscribe(ORB_ID(parameter_update));
 	_local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
+	_v_lpos_sp_sub = orb_subscribe(ORB_ID(vehicle_local_position_setpoint));
 	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, 0);
 	while(!_task_should_exit){
 		_looptimer.wait();
@@ -250,9 +253,10 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 				_control_mode.ignore_acceleration_force = true;
 			}
 
-			_waypoint.start_point(0) = _local_pos.x;
-			_waypoint.start_point(1) = _local_pos.y;
-			_waypoint.start_point(2) = _local_pos.z;
+
+			_waypoint.start_point(0) = _local_pos_sp.x;
+			_waypoint.start_point(1) = _local_pos_sp.y;
+			_waypoint.start_point(2) = _local_pos_sp.z;
 			_waypoint.end_point(0) = strtof(argv[1], 0);
 			_waypoint.end_point(1) = strtof(argv[2], 0);
 			_waypoint.end_point(2) = strtof(argv[3], 0);
@@ -335,6 +339,12 @@ TailsitterPathPlanner::poll_subscriptions()
 
 	if (updated) {
 		orb_copy(ORB_ID(vehicle_local_position), _local_pos_sub, &_local_pos);
+	}
+
+	orb_check(_v_lpos_sp_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(vehicle_local_position_setpoint), _v_lpos_sp_sub, &_local_pos_sp);
 	}
 
 }
