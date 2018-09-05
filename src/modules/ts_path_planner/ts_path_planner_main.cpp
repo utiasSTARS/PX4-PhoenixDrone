@@ -278,7 +278,7 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 void TailsitterPathPlanner::circle_trajectory(float centerX, float centerY, float radius, float yaw, float revs) {
 	float speed = _params.cruise_speed;
 	float w = speed / radius;
-	math::Vector<3> centerVector(centerX, centerY, _local_pos.z);
+	math::Vector<3> centerVector(centerX, centerY, _local_pos_sp.z);
 	math::Vector<3> radiusVector(radius, 0, 0); // (cos(wt), sin(wt)), t = 0
 	// "current" desired position of TS
 	// This vector will rotate over time.
@@ -288,6 +288,8 @@ void TailsitterPathPlanner::circle_trajectory(float centerX, float centerY, floa
 	while(_setpoint_updated) {
 		usleep(1e1);
 	}; // wait until ts is at location
+	// Add 5s wait to allow it to stabilize
+	usleep(5e6);
 	float t = 0; // time in seconds
 	hrt_abstime start = hrt_absolute_time();
 	reset_control_mode();
@@ -299,7 +301,6 @@ void TailsitterPathPlanner::circle_trajectory(float centerX, float centerY, floa
 		radiusVector(0) = radius*(float)cos(w*t);
 		radiusVector(1) = radius*(float)sin(w*t);
 		desiredPosition = centerVector + radiusVector;
-		math::Vector<3> currentPosition(_local_pos.x, _local_pos.y, _local_pos.z); // current Position
 		math::Vector<3> velocity(-w*(float)sin(w*t), w*(float)cos(w*t), 0);
 		if(w*t >= revs){
 			velocity.zero();
