@@ -863,7 +863,8 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 		_rates_int(i) = math::constrain(_rates_int(i), -_params.rate_int_lim(i), _params.rate_int_lim(i));
 	}
 
-	if (_v_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF){
+	if (_v_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF ||
+			_v_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_MANUAL || !_armed.armed){
 		_rates_int.zero();
 	}
 
