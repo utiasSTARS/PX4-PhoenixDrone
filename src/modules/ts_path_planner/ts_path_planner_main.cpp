@@ -175,6 +175,7 @@ TailsitterPathPlanner::task_main()
 
 }
 
+
 void
 TailsitterPathPlanner::publish_setpoint()
 {
@@ -248,42 +249,115 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 
 		if(!strcmp(argv[0], "pos")){
 			if (_control_mode.ignore_position){
-
 				_control_mode.ignore_position = false;
 				_control_mode.ignore_acceleration_force = true;
 			}
+			publish_waypoint(strtof(argv[1], 0), 
+							 strtof(argv[2], 0),
+							 strtof(argv[3], 0), 
+							 strtof(argv[4], 0) / 180.f * 3.14f);
+		}
 
-
-			_waypoint.start_point(0) = _local_pos_sp.x;
-			_waypoint.start_point(1) = _local_pos_sp.y;
-			_waypoint.start_point(2) = _local_pos_sp.z;
-			_waypoint.end_point(0) = strtof(argv[1], 0);
-			_waypoint.end_point(1) = strtof(argv[2], 0);
-			_waypoint.end_point(2) = strtof(argv[3], 0);
-			math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
-			direction.normalize();
-			_waypoint.direction = direction;
-			_waypoint.yaw = strtof(argv[4], 0) / 180.f * 3.14f;
-			math::Vector<3> velocity = direction * _params.cruise_speed;
-
-			for (int i=0; i<3; i++){
-				if (velocity(i) > _params.cruise_speed_max(i) || velocity(i) < -_params.cruise_speed_max(i)){
-					float scale = _params.cruise_speed_max(i) / velocity(i);
-					scale = scale > 0 ? scale:-scale;
-					velocity = velocity * scale;
-				}
-			}
-			_waypoint.speed = velocity.length();
-			_waypoint.velocity = velocity;
-
-			usleep(1e6);
-			_waypoint.start_time = hrt_absolute_time();
-			_setpoint_updated = true;
-
+		if(!strcmp(argv[0], "circle")) {
+			float centerX = strtof(argv[1], 0);
+			float centerY = strtof(argv[2], 0);
+			float radius = strtof(argv[3], 0);
+			float revs = strtof(argv[4], 0);
+			circle_trajectory(centerX, centerY, radius, 0, revs);
 		}
 	}
 }
 
+/*
+ * Publishes the next position setpoint given circle parameters.
+ * centerX, centerY are in NED coordinates.
+ * Rotates rev radians
+ * Assumes the tailsitter is already on the circumference of the circle.
+ * Goes clockwise.
+ */
+void TailsitterPathPlanner::circle_trajectory(float centerX, float centerY, float radius, float yaw, float revs) {
+	float speed = _params.cruise_speed;
+	float w = speed / radius;
+	math::Vector<3> centerVector(centerX, centerY, _local_pos.z);
+	math::Vector<3> radiusVector(radius, 0, 0); // (cos(wt), sin(wt)), t = 0
+	// "current" desired position of TS
+	// This vector will rotate over time.
+	math::Vector<3> desiredPosition = centerVector + radiusVector;
+	// First head to start
+	publish_waypoint(desiredPosition(0), desiredPosition(1), desiredPosition(2), yaw);
+	while(_setpoint_updated) {
+		usleep(1e1);
+	}; // wait until ts is at location
+	float t = 0; // time in seconds
+	hrt_abstime start = hrt_absolute_time();
+	reset_control_mode();
+	while(w*t < revs) {
+		_looptimer.wait();
+		t = hrt_elapsed_time(&start)/1e6f;
+		// Rotate the radius vector based on the elapsed time and desired speed and re-compute the currentDesiredVector
+		poll_subscriptions();
+		radiusVector(0) = radius*(float)cos(w*t);
+		radiusVector(1) = radius*(float)sin(w*t);
+		desiredPosition = centerVector + radiusVector;
+		math::Vector<3> currentPosition(_local_pos.x, _local_pos.y, _local_pos.z); // current Position
+		math::Vector<3> velocity(-w*(float)sin(w*t), w*(float)cos(w*t), 0);
+		if(w*t >= revs){
+			velocity.zero();
+		}
+		_pos_sp_triplet.timestamp = hrt_absolute_time();
+		_pos_sp_triplet.previous = _pos_sp_triplet.current;
+		_pos_sp_triplet.current.valid = true;
+		_pos_sp_triplet.current.position_valid = true;
+		_pos_sp_triplet.current.velocity_valid = true;
+		_pos_sp_triplet.current.velocity_frame = position_setpoint_s::VELOCITY_FRAME_LOCAL_NED;
+		_pos_sp_triplet.current.type = position_setpoint_s::SETPOINT_TYPE_OFFBOARD;
+		_pos_sp_triplet.current.alt_valid = false;
+		_pos_sp_triplet.current.yawspeed_valid = false;
+//				velocity.zero();
+//				velocity.normalize();
+//				velocity = velocity * 0.3f;
+		_pos_sp_triplet.current.acceleration_valid =  false;
+		_pos_sp_triplet.current.yaw_valid = true;
+		_pos_sp_triplet.current.x = desiredPosition(0);
+		_pos_sp_triplet.current.y = desiredPosition(1);
+		_pos_sp_triplet.current.z = desiredPosition(2);
+		_pos_sp_triplet.current.vx = velocity(0);
+		_pos_sp_triplet.current.vy = velocity(1);
+		_pos_sp_triplet.current.vz = velocity(2);
+		_pos_sp_triplet.current.yaw = yaw;
+		_pos_sp_triplet.current.timestamp = hrt_absolute_time();
+//				printf("Next point %f, %f, %f\n", (double) next_point(0),(double) next_point(1),(double) next_point(2));
+//				printf("Velocity %f, %f, %f\n", (double) velocity(0),(double) velocity(1),(double) velocity(2));
+		publish_setpoint();
+	}
+}
+
+/* Accepts (x,y,z) in NED frame and yaw in degrees and triggers publishing positoin_setpoint_triplet
+ */
+void TailsitterPathPlanner::publish_waypoint(float x, float y, float z, float yaw) {
+	_waypoint.start_point(0) = _local_pos.x;
+	_waypoint.start_point(1) = _local_pos.y;
+	_waypoint.start_point(2) = _local_pos.z;
+	_waypoint.end_point(0) = x;
+	_waypoint.end_point(1) = y;
+	_waypoint.end_point(2) = z;
+	math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
+	direction.normalize();
+	_waypoint.direction = direction;
+	_waypoint.yaw = yaw;
+	math::Vector<3> velocity = direction * _params.cruise_speed;
+	for (int i=0; i<3; i++){
+		if (velocity(i) > _params.cruise_speed_max(i) || velocity(i) < -_params.cruise_speed_max(i)){
+			float scale = _params.cruise_speed_max(i) / velocity(i);
+			scale = scale > 0 ? scale:-scale;
+			velocity = velocity * scale;
+		}
+	}
+	_waypoint.speed = velocity.length();
+	_waypoint.velocity = velocity;
+	_waypoint.start_time = hrt_absolute_time();
+	_setpoint_updated = true;
+}
 
 void
 TailsitterPathPlanner::update_control_mode(int argc, char* argv[])
