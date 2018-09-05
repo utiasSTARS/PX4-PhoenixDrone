@@ -207,6 +207,11 @@ private:
 		param_t pos_dr_x;
 		param_t pos_dr_y;
 		param_t pos_dr_z;
+		param_t pos_i_x;
+		param_t pos_i_y;
+		param_t pos_i_z;
+		param_t pos_err_int_max_xy;
+		param_t pos_err_int_max_z;
 
 	}		_params_handles;		/**< handles for interesting parameters */
 
@@ -237,6 +242,7 @@ private:
 		int opt_recover;
 
 		math::Vector<3> pos_p;
+		math::Vector<3> pos_i;
 		math::Vector<3> vel_p;
 		math::Vector<3> vel_i;
 		math::Vector<3> vel_d;
@@ -246,6 +252,7 @@ private:
 		math::Vector<3> sp_offs_max;
 		math::Vector<3> pos_tc;
 		math::Vector<3> pos_dr;
+		math::Vector<3> pos_err_int_max;
 	}		_params;
 
 	struct map_projection_reference_s _ref_pos;
@@ -270,6 +277,7 @@ private:
 	bool _hold_offboard_z = false;
 
 	math::Vector<3> _thrust_int;
+	math::Vector<3> _pos_err_int;
 
 	math::Vector<3> _pos;
 	math::Vector<3> _pos_sp;
@@ -466,6 +474,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	memset(&_ref_pos, 0, sizeof(_ref_pos));
 
 	_params.pos_p.zero();
+	_params.pos_i.zero();
 	_params.vel_p.zero();
 	_params.vel_i.zero();
 	_params.vel_d.zero();
@@ -473,6 +482,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params.vel_cruise.zero();
 	_params.vel_ff.zero();
 	_params.sp_offs_max.zero();
+	_params.pos_err_int_max.zero();
 
 	_pos.zero();
 	_pos_sp.zero();
@@ -488,6 +498,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_R_setpoint.identity();
 
 	_thrust_int.zero();
+	_pos_err_int.zero();
 
 	_params_handles.thr_min		= param_find("MPC_THR_MIN");
 	_params_handles.thr_max		= param_find("MPC_THR_MAX");
@@ -537,6 +548,11 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params_handles.pos_dr_x = param_find("TS_POS_DR_X");
 	_params_handles.pos_dr_y = param_find("TS_POS_DR_Y");
 	_params_handles.pos_dr_z = param_find("TS_POS_DR_Z");
+	_params_handles.pos_i_x  = param_find("TS_POS_I_X");
+	_params_handles.pos_i_y  = param_find("TS_POS_I_Y");
+	_params_handles.pos_i_z  = param_find("TS_POS_I_Z");
+	_params_handles.pos_err_int_max_xy = param_find("TS_POSINTLIM_XY");
+	_params_handles.pos_err_int_max_z  = param_find("TS_POSINTLIM_Z");
 
 	/* fetch initial parameter values */
 	parameters_update(true);
@@ -660,6 +676,20 @@ MulticopterPositionControl::parameters_update(bool force)
 		_params.pos_dr(1) = 2*v;
 		param_get(_params_handles.pos_dr_z, &v);
 		_params.pos_dr(2) = 2*v;
+
+		param_get(_params_handles.pos_i_x, &v);
+		_params.pos_i(0) = v;
+		param_get(_params_handles.pos_i_y, &v);
+		_params.pos_i(1) = v;
+		param_get(_params_handles.pos_i_z, &v);
+		_params.pos_i(2) = v;
+
+		param_get(_params_handles.pos_err_int_max_xy, &v);
+		_params.pos_err_int_max(0) = v;
+		_params.pos_err_int_max(1) = v;
+		param_get(_params_handles.pos_err_int_max_z, &v);
+		_params.pos_err_int_max(2) = v;
+
 		/*
 		 * increase the maximum horizontal acceleration such that stopping
 		 * within 1 s from full speed is feasible
@@ -1718,6 +1748,11 @@ MulticopterPositionControl::control_position(float dt)
 	_global_vel_sp.vy = _vel_sp(1);
 	_global_vel_sp.vz = _vel_sp(2);
 
+	_global_vel_sp.timestamp = hrt_absolute_time();
+	_global_vel_sp.vx = _pos_err_int(0);
+	_global_vel_sp.vy = _pos_err_int(1);
+	_global_vel_sp.vz = _pos_err_int(2);
+
 
 	/* publish velocity setpoint */
 	if (_global_vel_sp_pub != nullptr) {
@@ -1784,12 +1819,25 @@ MulticopterPositionControl::control_position(float dt)
 		/* Acceleration in NED frame */
 		math::Vector<3> thrust_sp;
 
+		math::Vector<3> pos_err = _pos_sp - _pos;
+
+		if (!isnan(pos_err(0)) && !isnan(pos_err(1)) && !isnan(pos_err(2))) _pos_err_int = _pos_err_int + pos_err;
+
+		if (_vehicle_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF ||
+				_vehicle_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_MANUAL || !_arming.armed){
+			_pos_err_int.zero();
+		}
+
+		for (int i = 0; i < 3; i++) {
+			_pos_err_int(i) = math::constrain(_pos_err_int(i), -_params.pos_err_int_max(i), _params.pos_err_int_max(i));
+		}
 
 		if (_control_mode.flag_control_acceleration_enabled && _pos_sp_triplet.current.acceleration_valid) {
 			thrust_sp = math::Vector<3>(_pos_sp_triplet.current.a_x, _pos_sp_triplet.current.a_y, _pos_sp_triplet.current.a_z);
 
 		} else {
 			thrust_sp = ((_pos_sp - _pos).edivide(_params.pos_tc)).edivide(_params.pos_tc) +
+						(_pos_err_int).emult(_params.pos_i) +
 						((_vel_sp - _vel).edivide(_params.pos_tc)).emult(_params.pos_dr);
 			//warnx("Thrust, %f, %f, %f", (double) thrust_sp(0),(double)thrust_sp(1),(double)thrust_sp(2));
 

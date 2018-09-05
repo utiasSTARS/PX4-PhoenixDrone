@@ -541,5 +541,65 @@ PARAM_DEFINE_FLOAT(TS_POS_DR_Y, 0.6f);
  * @group Tailsitter Position Control
  */
 PARAM_DEFINE_FLOAT(TS_POS_DR_Z, 1.5f);
+/**
+ * Position controller integral gain X
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.001
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_I_X, 0.0f);
+
+/**
+ * Position controller integral gain Y
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_I_Y, 0.0f);
+
+/**
+ * Position controller integral gain Z
+ *
+ * @unit m/s/s
+ * @min 0.0
+ * @max 20.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POS_I_Z, 0.0f);
+
+
+/**
+ * Position controller Integral Lim X
+ *
+ * @unit m*s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.001
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POSINTLIM_XY, 0.6f);
+
+/**
+ * Position controller Integral Lim Z
+ *
+ * @unit m*s
+ * @min 0.0
+ * @max 15.0
+ * @increment 0.01
+ * @decimal 2
+ * @group Tailsitter Position Control
+ */
+PARAM_DEFINE_FLOAT(TS_POSINTLIM_Z, 0.6f);
 
 
