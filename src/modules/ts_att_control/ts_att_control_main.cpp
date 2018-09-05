@@ -803,7 +803,7 @@ TailsitterAttitudeControl::control_attitude(float dt)
 		_e_R_int(i) = math::constrain(_e_R_int(i), -_params.att_int_lim(i), _params.att_int_lim(i));
 	}
 
-	_rates_sp = _params.att_p.emult(e_R) - _params.att_d.emult(rates) + _params.att_i.emult(_e_R_int);
+	_rates_sp = _params.att_p.emult(e_R);// - _params.att_d.emult(rates) + _params.att_i.emult(_e_R_int);
 
 	//_e_R_prev = e_R;
 
@@ -856,7 +856,8 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 	math::Vector<3> rates_err = _rates_sp - rates;
 	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
 
-	_rates_int = _rates_int +  rates_err * dt;
+	if (!isnan(rates_err(0)) && !isnan(rates_err(1)) && !isnan(rates_err(2))) _rates_int = _rates_int +  rates_err * dt;
+
 	/* limit rates integral */
 	for (int i = 0 ; i < 3; i++){
 		_rates_int(i) = math::constrain(_rates_int(i), -_params.rate_int_lim(i), _params.rate_int_lim(i));
