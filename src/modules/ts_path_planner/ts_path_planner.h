@@ -53,12 +53,14 @@ private:
 	struct{
 		math::Vector<3>	cruise_speed_max;
 		float			cruise_speed;
+		float 			star_rho;
 	}_params;
 
 	struct{
 		param_t	z_cruise_speed;
 		param_t xy_cruise_speed;
 		param_t cruise_speed;
+		param_t star_rho;
 	}_param_handles;
 
 	struct{
@@ -77,7 +79,7 @@ private:
 	static void	task_main_trampoline(int argc, char *argv[]);
 	void task_main();
 	static void star_generator_trampoline(int argc, char*argv[]);
-	void star_generator_main(char*argv[]);
+	void star_generator_main();
 	void publish_setpoint();
 	void publish_control_mode();
 	void publish_waypoint(float x, float y, float z, float yaw);

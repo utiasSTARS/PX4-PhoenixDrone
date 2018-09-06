@@ -57,9 +57,11 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 {
 	_params.cruise_speed_max.zero();
 	_params.cruise_speed = 0;
+	_params.star_rho = 0;
 	_param_handles.z_cruise_speed = param_find("TS_CRUISE_MAX_Z");
 	_param_handles.xy_cruise_speed = param_find("TS_CRUISE_MAX_XY");
 	_param_handles.cruise_speed = param_find("TS_CRUISE_SPEED");
+	_param_handles.star_rho = param_find("TS_STAR_RHO");
 	params_update(true);
 
 	_waypoint.start_time = hrt_absolute_time();
@@ -119,7 +121,7 @@ TailsitterPathPlanner::start(){
 void
 TailsitterPathPlanner::star_generator_trampoline(int argc, char *argv[])
 {
-	ts_path_planner::g_planner->star_generator_main(argv);
+	ts_path_planner::g_planner->star_generator_main();
 }
 
 void
@@ -370,7 +372,7 @@ void TailsitterPathPlanner::publish_waypoint(float x, float y, float z, float ya
 	_waypoint.end_point(1) = y;
 	_waypoint.end_point(2) = z;
 	math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
-	direction.normalize();
+	if (direction.length() > 1e-12f)	direction.normalize();
 	_waypoint.direction = direction;
 	_waypoint.yaw = yaw;
 	math::Vector<3> velocity = direction * _params.cruise_speed;
@@ -429,6 +431,7 @@ TailsitterPathPlanner::params_update(bool force)
 			_params.cruise_speed_max(0) = v;
 			_params.cruise_speed_max(1) = v;
 			param_get(_param_handles.cruise_speed, &_params.cruise_speed);
+			param_get(_param_handles.star_rho, &_params.star_rho);
 
 		}
 }
