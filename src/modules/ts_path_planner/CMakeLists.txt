@@ -38,6 +38,7 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		ts_path_planner_main.cpp
+		star_trajectory.cpp
 	DEPENDS
 		platforms__common
 	)

@@ -33,6 +33,7 @@ public:
 private:
 	bool _task_should_exit;
 	int  _planner_task;
+	int  _circle_traj_generator;
 	bool _setpoint_updated;
 	bool _control_mode_updated;
 
@@ -71,13 +72,17 @@ private:
 	}_waypoint;
 
 	LoopTimer _looptimer;
+	LoopTimer _looptimer_circle;
 
 	static void	task_main_trampoline(int argc, char *argv[]);
 	void task_main();
+	static void star_generator_trampoline(int argc, char*argv[]);
+	void star_generator_main();
 	void publish_setpoint();
 	void publish_control_mode();
 	void publish_waypoint(float x, float y, float z, float yaw);
-	void circle_trajectory(float centerX, float centerY, float radius, float yaw, float revs);
+	void circle_trajectory(float centerX, float centerY, float radius,
+			float zAmplitude, float yaw, float revs);
 	static void publish_control_mode_trampoline(void *arg);
 	void reset_control_mode();
 	void params_update(bool force_update);
