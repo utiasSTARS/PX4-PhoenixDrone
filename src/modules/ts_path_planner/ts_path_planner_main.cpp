@@ -40,6 +40,7 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_task_should_exit(false),
 		_planner_task(-1),
 		_circle_traj_generator(-1),
+		_star_traj_generator(-1),
 		_setpoint_updated(false),
 		_control_mode_updated(false),
 		_v_control_mode_pub(nullptr),
@@ -116,6 +117,12 @@ TailsitterPathPlanner::start(){
 	}
 
 	return OK;
+}
+
+void
+TailsitterPathPlanner::circle_generator_trampoline(int argc, char *argv[])
+{
+	ts_path_planner::g_planner->circle_trajectory(argv);
 }
 
 void
@@ -274,19 +281,22 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 				PX4_WARN("Require 7 parameters for circle");
 				return;
 			}
-			float centerX = strtof(argv[1], 0);
-			float centerY = strtof(argv[2], 0);
-			float radius = strtof(argv[3], 0);
-			float zAmplitude = strtof(argv[4], 0);
-			float yaw = strtof(argv[5], 0);
-			float revs = strtof(argv[6], 0);
-			circle_trajectory(centerX, centerY, radius, zAmplitude, yaw/180.f*3.14159f, revs*6.28f);
+
+
+			_circle_traj_generator = px4_task_spawn_cmd("circle_trajectory_generator",
+					   SCHED_DEFAULT,
+					   SCHED_PRIORITY_MAX - 5,
+					   1000,
+					   (px4_main_t)&TailsitterPathPlanner::circle_generator_trampoline,
+					   (char *const *)argv);
+
+			//circle_trajectory(centerX, centerY, radius, zAmplitude, yaw/180.f*3.14159f, revs*6.28f);
 		}
 
 		if (!strcmp(argv[0], "star")) {
 			if (argc != 2) { PX4_WARN("Require 1 parametres for star traj"); return;}
 
-			_circle_traj_generator = px4_task_spawn_cmd("star_trajectory_generator",
+			_star_traj_generator = px4_task_spawn_cmd("star_trajectory_generator",
 							   SCHED_DEFAULT,
 							   SCHED_PRIORITY_MAX - 5,
 							   1000,
@@ -303,8 +313,17 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
  * Assumes the tailsitter is already on the circumference of the circle.
  * Goes clockwise.
  */
-void TailsitterPathPlanner::circle_trajectory(float centerX, float centerY,
-		float radius, float zAmplitude, float yaw, float revs) {
+void TailsitterPathPlanner::circle_trajectory(char* argv[]) {
+
+	float centerX = strtof(argv[2], 0);
+	float centerY = strtof(argv[3], 0);
+	float radius = strtof(argv[4], 0);
+	float zAmplitude = strtof(argv[5], 0);
+	float yaw = strtof(argv[6], 0)/180.f*3.14159f;
+	float revs = strtof(argv[7], 0)*6.28f;
+
+
+
 	float speed = _params.cruise_speed;
 	float w = speed / radius;
 	math::Vector<3> centerVector(centerX, centerY, _local_pos_sp.z);
@@ -318,7 +337,7 @@ void TailsitterPathPlanner::circle_trajectory(float centerX, float centerY,
 		usleep(5e6);
 	//}; // wait until ts is at location
 	// Add 5s wait to allow it to stabilize
-	usleep(5e6);
+	usleep(1e6);
 	float t = 0; // time in seconds
 	hrt_abstime start_time = hrt_absolute_time();
 	while(w*t < revs) {
