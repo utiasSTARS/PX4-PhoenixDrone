@@ -77,7 +77,7 @@ private:
 	static void	task_main_trampoline(int argc, char *argv[]);
 	void task_main();
 	static void star_generator_trampoline(int argc, char*argv[]);
-	void star_generator_main();
+	void star_generator_main(char*argv[]);
 	void publish_setpoint();
 	void publish_control_mode();
 	void publish_waypoint(float x, float y, float z, float yaw);

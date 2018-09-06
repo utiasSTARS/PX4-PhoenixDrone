@@ -119,7 +119,7 @@ TailsitterPathPlanner::start(){
 void
 TailsitterPathPlanner::star_generator_trampoline(int argc, char *argv[])
 {
-	ts_path_planner::g_planner->star_generator_main();
+	ts_path_planner::g_planner->star_generator_main(argv);
 }
 
 void
@@ -282,14 +282,14 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 		}
 
 		if (!strcmp(argv[0], "star")) {
-			if (argc != 3) { PX4_WARN("Require x parametres for star traj"); return;}
+			if (argc != 2) { PX4_WARN("Require 1 parametres for star traj"); return;}
 
 			_circle_traj_generator = px4_task_spawn_cmd("star_trajectory_generator",
 							   SCHED_DEFAULT,
 							   SCHED_PRIORITY_MAX - 5,
 							   1000,
 							   (px4_main_t)&TailsitterPathPlanner::star_generator_trampoline,
-							   nullptr);
+							   (char *const *)argv);
 		}
 	}
 }
