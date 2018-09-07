@@ -14,7 +14,7 @@ void TailsitterPathPlanner::star_generator_main()
 	printf("rho is: %.2f\n", (double)rho);
 	//float R = rho/0.525731f*0.200811f;
 	float delta = 2*3.14159f/5.f;
-	float Z = -1.4f;
+	float Z = -1.0f;
 
 	for (int i = 0; i < 6; i ++) {
 		Verticies(i, 0) = rho*(float)sin(i*delta);
@@ -39,7 +39,7 @@ void TailsitterPathPlanner::star_generator_main()
 					Verticies(sequence[i], 2),
 					((180.f-18.f) + (i+1) * 36.f)/180.f*3.14159f);
 		while(_setpoint_updated) usleep(1e5);
-		usleep(2e6);
+		usleep(4e6);
 	}
 
 }

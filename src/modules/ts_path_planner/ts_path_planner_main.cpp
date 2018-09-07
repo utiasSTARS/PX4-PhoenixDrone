@@ -155,7 +155,8 @@ TailsitterPathPlanner::task_main()
 				math::Vector<3> next_point = _waypoint.start_point + _waypoint.direction * dt * _waypoint.speed;
 				math::Vector<3> velocity = _waypoint.velocity;
 
-				if((next_point - _waypoint.end_point).length()< 0.01f){
+				if((next_point - _waypoint.end_point).length()< 0.01f ||
+						(_waypoint.end_point - next_point) * velocity < 0){ //stop waypoint increments when overshoot
 					_setpoint_updated = false;
 					next_point = _waypoint.end_point;
 					velocity.zero();
@@ -277,7 +278,7 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 		}
 
 		if(!strcmp(argv[0], "circle")) {
-			if(argc != 7) {
+			if(argc < 7) {
 				PX4_WARN("Require 7 parameters for circle");
 				return;
 			}
@@ -321,6 +322,7 @@ void TailsitterPathPlanner::circle_trajectory(char* argv[]) {
 	float zAmplitude = strtof(argv[5], 0);
 	float yaw = strtof(argv[6], 0)/180.f*3.14159f;
 	float revs = strtof(argv[7], 0)*6.28f;
+	bool hdg_const = atoi(argv[8]);
 
 
 
@@ -373,7 +375,7 @@ void TailsitterPathPlanner::circle_trajectory(char* argv[]) {
 		_pos_sp_triplet.current.vx = velocity(0);
 		_pos_sp_triplet.current.vy = velocity(1);
 		_pos_sp_triplet.current.vz = velocity(2);
-		_pos_sp_triplet.current.yaw = yaw + w*t;
+		_pos_sp_triplet.current.yaw = hdg_const? yaw: yaw + w*t;
 		_pos_sp_triplet.current.timestamp = hrt_absolute_time();
 //				printf("Next point %f, %f, %f\n", (double) next_point(0),(double) next_point(1),(double) next_point(2));
 //				printf("Velocity %f, %f, %f\n", (double) velocity(0),(double) velocity(1),(double) velocity(2));
