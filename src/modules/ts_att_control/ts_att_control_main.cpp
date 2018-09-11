@@ -690,7 +690,7 @@ TailsitterAttitudeControl::publish_debug_tupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
 	_dbg_tupple.value = value;
-	value = isnan(value)?-1:value;
+	value = PX4_ISFINITE(value)?-1:value;
 
 	if (_debug_outputs_pub == nullptr) {
 		_debug_outputs_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
@@ -856,7 +856,7 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 	math::Vector<3> rates_err = _rates_sp - rates;
 	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
 
-	if (!isnan(rates_err(0)) && !isnan(rates_err(1)) && !isnan(rates_err(2))) _rates_int = _rates_int +  rates_err * dt;
+	if (!PX4_ISFINITE(rates_err(0)) && !PX4_ISFINITE(rates_err(1)) && !PX4_ISFINITE(rates_err(2))) _rates_int = _rates_int +  rates_err * dt;
 
 	/* limit rates integral */
 	for (int i = 0 ; i < 3; i++){
