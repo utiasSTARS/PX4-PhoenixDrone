@@ -39,6 +39,8 @@ TailsitterPathPlanner	*g_planner;
 TailsitterPathPlanner::TailsitterPathPlanner():
 		_task_should_exit(false),
 		_planner_task(-1),
+		_circle_traj_generator(-1),
+		_star_traj_generator(-1),
 		_setpoint_updated(false),
 		_control_mode_updated(false),
 		_v_control_mode_pub(nullptr),
@@ -51,13 +53,16 @@ TailsitterPathPlanner::TailsitterPathPlanner():
 		_local_pos{},
 		_local_pos_sp{},
 		_work{},
-		_looptimer(2e4)
+		_looptimer(2e4),
+		_looptimer_circle(2e4)
 {
 	_params.cruise_speed_max.zero();
 	_params.cruise_speed = 0;
+	_params.star_rho = 0;
 	_param_handles.z_cruise_speed = param_find("TS_CRUISE_MAX_Z");
 	_param_handles.xy_cruise_speed = param_find("TS_CRUISE_MAX_XY");
 	_param_handles.cruise_speed = param_find("TS_CRUISE_SPEED");
+	_param_handles.star_rho = param_find("TS_STAR_RHO");
 	params_update(true);
 
 	_waypoint.start_time = hrt_absolute_time();
@@ -115,6 +120,18 @@ TailsitterPathPlanner::start(){
 }
 
 void
+TailsitterPathPlanner::circle_generator_trampoline(int argc, char *argv[])
+{
+	ts_path_planner::g_planner->circle_trajectory(argv);
+}
+
+void
+TailsitterPathPlanner::star_generator_trampoline(int argc, char *argv[])
+{
+	ts_path_planner::g_planner->star_generator_main();
+}
+
+void
 TailsitterPathPlanner::task_main_trampoline(int argc, char *argv[])
 {
 	ts_path_planner::g_planner->task_main();
@@ -130,6 +147,7 @@ TailsitterPathPlanner::task_main()
 	work_queue(HPWORK, &_work, (worker_t)&TailsitterPathPlanner::publish_control_mode_trampoline, this, 0);
 	while(!_task_should_exit){
 		_looptimer.wait();
+		params_update(true);
 		poll_subscriptions();
 		if (_setpoint_updated){
 
@@ -137,7 +155,8 @@ TailsitterPathPlanner::task_main()
 				math::Vector<3> next_point = _waypoint.start_point + _waypoint.direction * dt * _waypoint.speed;
 				math::Vector<3> velocity = _waypoint.velocity;
 
-				if((next_point - _waypoint.end_point).length()< 0.05f){
+				if((next_point - _waypoint.end_point).length()< 0.01f ||
+						(_waypoint.end_point - next_point) * velocity < 0){ //stop waypoint increments when overshoot
 					_setpoint_updated = false;
 					next_point = _waypoint.end_point;
 					velocity.zero();
@@ -174,6 +193,7 @@ TailsitterPathPlanner::task_main()
 	}
 
 }
+
 
 void
 TailsitterPathPlanner::publish_setpoint()
@@ -248,42 +268,147 @@ TailsitterPathPlanner::update_pos_setpoint(int argc, char*argv[]){
 
 		if(!strcmp(argv[0], "pos")){
 			if (_control_mode.ignore_position){
-
 				_control_mode.ignore_position = false;
 				_control_mode.ignore_acceleration_force = true;
 			}
+			publish_waypoint(strtof(argv[1], 0), 
+							 strtof(argv[2], 0),
+							 strtof(argv[3], 0), 
+							 strtof(argv[4], 0) / 180.f * 3.14f);
+		}
 
-
-			_waypoint.start_point(0) = _local_pos_sp.x;
-			_waypoint.start_point(1) = _local_pos_sp.y;
-			_waypoint.start_point(2) = _local_pos_sp.z;
-			_waypoint.end_point(0) = strtof(argv[1], 0);
-			_waypoint.end_point(1) = strtof(argv[2], 0);
-			_waypoint.end_point(2) = strtof(argv[3], 0);
-			math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
-			direction.normalize();
-			_waypoint.direction = direction;
-			_waypoint.yaw = strtof(argv[4], 0) / 180.f * 3.14f;
-			math::Vector<3> velocity = direction * _params.cruise_speed;
-
-			for (int i=0; i<3; i++){
-				if (velocity(i) > _params.cruise_speed_max(i) || velocity(i) < -_params.cruise_speed_max(i)){
-					float scale = _params.cruise_speed_max(i) / velocity(i);
-					scale = scale > 0 ? scale:-scale;
-					velocity = velocity * scale;
-				}
+		if(!strcmp(argv[0], "circle")) {
+			if(argc < 7) {
+				PX4_WARN("Require 7 parameters for circle");
+				return;
 			}
-			_waypoint.speed = velocity.length();
-			_waypoint.velocity = velocity;
 
-			usleep(1e6);
-			_waypoint.start_time = hrt_absolute_time();
-			_setpoint_updated = true;
 
+			_circle_traj_generator = px4_task_spawn_cmd("circle_trajectory_generator",
+					   SCHED_DEFAULT,
+					   SCHED_PRIORITY_MAX - 5,
+					   1000,
+					   (px4_main_t)&TailsitterPathPlanner::circle_generator_trampoline,
+					   (char *const *)argv);
+
+			//circle_trajectory(centerX, centerY, radius, zAmplitude, yaw/180.f*3.14159f, revs*6.28f);
+		}
+
+		if (!strcmp(argv[0], "star")) {
+			if (argc != 2) { PX4_WARN("Require 1 parametres for star traj"); return;}
+
+			_star_traj_generator = px4_task_spawn_cmd("star_trajectory_generator",
+							   SCHED_DEFAULT,
+							   SCHED_PRIORITY_MAX - 5,
+							   1000,
+							   (px4_main_t)&TailsitterPathPlanner::star_generator_trampoline,
+							   (char *const *)argv);
 		}
 	}
 }
 
+/*
+ * Publishes the next position setpoint given circle parameters.
+ * centerX, centerY are in NED coordinates.
+ * Rotates rev radians
+ * Assumes the tailsitter is already on the circumference of the circle.
+ * Goes clockwise.
+ */
+void TailsitterPathPlanner::circle_trajectory(char* argv[]) {
+
+	float centerX = strtof(argv[2], 0);
+	float centerY = strtof(argv[3], 0);
+	float radius = strtof(argv[4], 0);
+	float zAmplitude = strtof(argv[5], 0);
+	float yaw = strtof(argv[6], 0)/180.f*3.14159f;
+	float revs = strtof(argv[7], 0)*6.28f;
+	bool hdg_const = atoi(argv[8]);
+
+
+
+	float speed = _params.cruise_speed;
+	float w = speed / radius;
+	math::Vector<3> centerVector(centerX, centerY, _local_pos_sp.z);
+	math::Vector<3> radiusVector(radius, 0, 0); // (cos(wt), sin(wt)), t = 0
+	// "current" desired position of TS
+	// This vector will rotate over time.
+	math::Vector<3> desiredPosition = centerVector + radiusVector;
+	// First head to start
+	publish_waypoint(desiredPosition(0), desiredPosition(1), desiredPosition(2), yaw);
+	//while(_setpoint_updated) {
+		usleep(5e6);
+	//}; // wait until ts is at location
+	// Add 5s wait to allow it to stabilize
+	usleep(1e6);
+	float t = 0; // time in seconds
+	hrt_abstime start_time = hrt_absolute_time();
+	while(w*t < revs) {
+		_looptimer_circle.wait();
+		t = hrt_elapsed_time(&start_time)/1e6f;
+		// Rotate the radius vector based on the elapsed time and desired speed and re-compute the currentDesiredVector
+		poll_subscriptions();
+		radiusVector(0) = radius*(float)cos(w*t);
+		radiusVector(1) = radius*(float)sin(w*t);
+		radiusVector(2) = zAmplitude*(float)sin(w*t);
+		desiredPosition = centerVector + radiusVector;
+		math::Vector<3> velocity(-w*(float)sin(w*t), w*(float)cos(w*t), 0);
+		if(w*t >= revs){
+			velocity.zero();
+		}
+		_pos_sp_triplet.timestamp = hrt_absolute_time();
+		_pos_sp_triplet.previous = _pos_sp_triplet.current;
+		_pos_sp_triplet.current.valid = true;
+		_pos_sp_triplet.current.position_valid = true;
+		_pos_sp_triplet.current.velocity_valid = true;
+		_pos_sp_triplet.current.velocity_frame = position_setpoint_s::VELOCITY_FRAME_LOCAL_NED;
+		_pos_sp_triplet.current.type = position_setpoint_s::SETPOINT_TYPE_OFFBOARD;
+		_pos_sp_triplet.current.alt_valid = false;
+		_pos_sp_triplet.current.yawspeed_valid = false;
+//				velocity.zero();
+//				velocity.normalize();
+//				velocity = velocity * 0.3f;
+		_pos_sp_triplet.current.acceleration_valid =  false;
+		_pos_sp_triplet.current.yaw_valid = true;
+		_pos_sp_triplet.current.x = desiredPosition(0);
+		_pos_sp_triplet.current.y = desiredPosition(1);
+		_pos_sp_triplet.current.z = desiredPosition(2);
+		_pos_sp_triplet.current.vx = velocity(0);
+		_pos_sp_triplet.current.vy = velocity(1);
+		_pos_sp_triplet.current.vz = velocity(2);
+		_pos_sp_triplet.current.yaw = hdg_const? yaw: yaw + w*t;
+		_pos_sp_triplet.current.timestamp = hrt_absolute_time();
+//				printf("Next point %f, %f, %f\n", (double) next_point(0),(double) next_point(1),(double) next_point(2));
+//				printf("Velocity %f, %f, %f\n", (double) velocity(0),(double) velocity(1),(double) velocity(2));
+		publish_setpoint();
+	}
+}
+
+/* Accepts (x,y,z) in NED frame and yaw in degrees and triggers publishing positoin_setpoint_triplet
+ */
+void TailsitterPathPlanner::publish_waypoint(float x, float y, float z, float yaw) {
+	_waypoint.start_point(0) = _local_pos_sp.x;
+	_waypoint.start_point(1) = _local_pos_sp.y;
+	_waypoint.start_point(2) = _local_pos_sp.z;
+	_waypoint.end_point(0) = x;
+	_waypoint.end_point(1) = y;
+	_waypoint.end_point(2) = z;
+	math::Vector<3> direction = _waypoint.end_point - _waypoint.start_point;
+	if (direction.length() > 1e-12f)	direction.normalize();
+	_waypoint.direction = direction;
+	_waypoint.yaw = yaw;
+	math::Vector<3> velocity = direction * _params.cruise_speed;
+	for (int i=0; i<3; i++){
+		if (velocity(i) > _params.cruise_speed_max(i) || velocity(i) < -_params.cruise_speed_max(i)){
+			float scale = _params.cruise_speed_max(i) / velocity(i);
+			scale = scale > 0 ? scale:-scale;
+			velocity = velocity * scale;
+		}
+	}
+	_waypoint.speed = velocity.length();
+	_waypoint.velocity = velocity;
+	_waypoint.start_time = hrt_absolute_time();
+	_setpoint_updated = true;
+}
 
 void
 TailsitterPathPlanner::update_control_mode(int argc, char* argv[])
@@ -327,6 +452,7 @@ TailsitterPathPlanner::params_update(bool force)
 			_params.cruise_speed_max(0) = v;
 			_params.cruise_speed_max(1) = v;
 			param_get(_param_handles.cruise_speed, &_params.cruise_speed);
+			param_get(_param_handles.star_rho, &_params.star_rho);
 
 		}
 }

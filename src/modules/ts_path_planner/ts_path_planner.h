@@ -33,6 +33,8 @@ public:
 private:
 	bool _task_should_exit;
 	int  _planner_task;
+	int  _circle_traj_generator;
+	int  _star_traj_generator;
 	bool _setpoint_updated;
 	bool _control_mode_updated;
 
@@ -52,12 +54,14 @@ private:
 	struct{
 		math::Vector<3>	cruise_speed_max;
 		float			cruise_speed;
+		float 			star_rho;
 	}_params;
 
 	struct{
 		param_t	z_cruise_speed;
 		param_t xy_cruise_speed;
 		param_t cruise_speed;
+		param_t star_rho;
 	}_param_handles;
 
 	struct{
@@ -71,11 +75,17 @@ private:
 	}_waypoint;
 
 	LoopTimer _looptimer;
+	LoopTimer _looptimer_circle;
 
 	static void	task_main_trampoline(int argc, char *argv[]);
 	void task_main();
+	static void circle_generator_trampoline(int argc, char*argv[]);
+	static void star_generator_trampoline(int argc, char*argv[]);
+	void star_generator_main();
 	void publish_setpoint();
 	void publish_control_mode();
+	void publish_waypoint(float x, float y, float z, float yaw);
+	void circle_trajectory(char *argv[]);
 	static void publish_control_mode_trampoline(void *arg);
 	void reset_control_mode();
 	void params_update(bool force_update);
