@@ -664,6 +664,9 @@ TailsitterAttitudeControl::publish_debug_tupple(int8_t *key, float value)
 
 /**
  * Attitude controller.
+ * Polls vehicle_attitude_setpoint, calculates desired rates and puts into _rates_sp.
+ * Basically calculates rotation error quaternion
+ * wdes = (1/t)*qerr
  * Input: 'vehicle_attitude_setpoint' topics (depending on mode)
  * Output: '_rates_sp' vector, '_thrust_sp'
  */
@@ -783,6 +786,8 @@ TailsitterAttitudeControl::pid_attenuations(float tpa_breakpoint, float tpa_rate
 
 /*
  * Attitude rates controller.
+ * Takes current rate and calculates desired moments and thrust.
+ * Basically: mdes = (1/t) * werr
  * Input: '_rates_sp' vector, '_thrust_sp'
  * Output: '_att_control' vector
  */
@@ -798,6 +803,9 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
+	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
+
+	if (!PX4_ISFINITE(rates_err(0)) && !PX4_ISFINITE(rates_err(1)) && !PX4_ISFINITE(rates_err(2))) _rates_int = _rates_int +  rates_err * dt;
 
 	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc);
 	math::Vector<3> att_control2 = rates % (_J * rates);
@@ -944,7 +952,7 @@ TailsitterAttitudeControl::task_main()
 
 			if (_v_control_mode.flag_control_attitude_enabled) {
 
-
+				// calculates _rates_sp
 				control_attitude(dt);
 
 				/* publish attitude rates setpoint */
@@ -962,7 +970,6 @@ TailsitterAttitudeControl::task_main()
 				}
 
 				//}
-
 			} else {
 				/* attitude controller disabled, poll rates setpoint topic */
 				if (_v_control_mode.flag_control_manual_enabled) {
@@ -996,6 +1003,8 @@ TailsitterAttitudeControl::task_main()
 			}
 
 			if (_v_control_mode.flag_control_rates_enabled) {
+				// Calculates _att_control which is mxdes, mydes, mzdes
+				// Note that _thrust_sp is given to att controller
 				control_attitude_rates(dt);
 
 				/* publish actuator controls */
