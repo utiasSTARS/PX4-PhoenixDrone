@@ -863,7 +863,7 @@ MulticopterPositionControl::publish_debug_outputs(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
 	_dbg_tupple.value = value;
-	value = isnan(value)?-1:value;
+	value = PX4_ISFINITE(value)?-1:value;
 
 	if (_debug_outputs_pub == nullptr) {
 		_debug_outputs_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
@@ -1999,7 +1999,7 @@ MulticopterPositionControl::control_position(float dt)
 			float psi = asin(thrust_sp(0) / l);
 			psi = _att_sp.yaw_body;
 			math::Vector<3> y_C(-sin(psi), cos(psi), 0.0f);
-			if(!_pos_sp_triplet.current.yaw_valid || isnan(psi)){
+			if(!_pos_sp_triplet.current.yaw_valid || PX4_ISFINITE(psi)){
 				y_C.zero();
 				y_C(0) = -1.0f;
 				//warnx("Yaw %f \n", (double) psi);

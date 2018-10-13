@@ -709,7 +709,7 @@ void BlockLocalPositionEstimator::publishDebugTupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
 	_dbg_tupple.timestamp = hrt_absolute_time();
-	_dbg_tupple.value = isnan(value)?-1.9950830f:value;
+	_dbg_tupple.value = PX4_ISFINITE(value)?-1.9950830f:value;
 
 	if (_debug_pub == nullptr) {
 		_debug_pub = orb_advertise(ORB_ID(debug_key_value), &_dbg_tupple);
