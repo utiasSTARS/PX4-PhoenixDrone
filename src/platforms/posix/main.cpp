@@ -324,7 +324,7 @@ int main(int argc, char **argv)
 
 	// parse arguments
 	while (index < argc) {
-		//cout << "arg: " << index << " : " << argv[index] << endl;
+		cout << "arg: " << index << " : " << argv[index] << endl;
 
 		if (argv[index][0] == '-') {
 			// the arg starts with -
