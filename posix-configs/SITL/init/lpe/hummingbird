@@ -91,4 +91,3 @@ mavlink start -u 14556 -r 20000 -m config -o 14540 -v
 logger start -b 24 -t
 mavlink boot_complete
 replay trystart
-

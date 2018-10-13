@@ -10,6 +10,7 @@
 #include <px4_defines.h>
 #include <px4_tasks.h>
 #include <px4_posix.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,7 +101,6 @@ private:
 	int		_armed_sub;				/**< arming status subscription */
 	int 	_motor_limits_sub;		/**< motor limits subscription */
 	int 	_battery_status_sub;	/**< battery status subscription */
-	int 	_v_status_sub;     		/**< vehicle status subscription */
 
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
@@ -126,7 +126,6 @@ private:
 	struct battery_status_s				_battery_status;	/**< battery status */
 	struct actuator_outputs_s			_actuator_outputs;  /**< actuator outputs(posix) */
 	struct ts_actuator_controls_s		_ts_actuator_controls; /**< actuator outputs(nuttx)*/
-	struct vehicle_status_s 			_v_status; 			/**< vehicle status */
 	struct debug_key_value_s			_dbg_tupple;		/**< debug tupple */
 
 	TailsitterRateControl*	_ts_rate_control;
@@ -149,9 +148,6 @@ private:
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
 
-
-	math::Vector<3>		_e_R_prev;      /**< previous attitude error in screw-axis convention */
-	math::Vector<3>		_e_R_int;       /**< attitude error integral */
 	math::Vector<3>		_rates_prev;	/**< angular rates on previous step */
 	math::Vector<3>		_rates_sp_prev; /**< previous rates setpoint */
 	math::Vector<3>		_rates_sp;		/**< angular rates setpoint */
@@ -169,8 +165,6 @@ private:
 		param_t roll_integ_lim;
 		param_t roll_tc;
 		param_t roll_rate_tc;
-		param_t roll_rate_i;
-		param_t roll_rate_integ_lim;
 
 		param_t pitch_p;
 		param_t pitch_i;
@@ -178,8 +172,6 @@ private:
 		param_t pitch_integ_lim;
 		param_t pitch_tc;
 		param_t pitch_rate_tc;
-		param_t pitch_rate_i;
-		param_t pitch_rate_integ_lim;
 
 		param_t tpa_breakpoint_p;
 		param_t tpa_breakpoint_i;
@@ -225,10 +217,8 @@ private:
 		math::Vector<3> att_int_lim;			/**< integrator state limit for rate loop */
 		math::Vector<3> att_tc;
 		math::Vector<3> rate_tc;				/**< time constant for angular rate error */
-		math::Vector<3> rate_i;                 /**< rate integral gain*/
 		math::Vector<3> att_max;
 		math::Vector<3> rate_max;
-		math::Vector<3> rate_int_lim;			/**< rate integral limit*/
 		math::Vector<3> momt_const;				/** Momentum constants roll, pith, yaw **/
 
 		float tpa_breakpoint_p;				/**< Throttle PID Attenuation breakpoint */
@@ -305,8 +295,6 @@ private:
 	 */
 	void		battery_status_poll();
 
-	void 		vehicle_status_poll();
-
 	void 		publish_debug_tupple(int8_t *key, float value);
 
 	/**
@@ -378,12 +366,10 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_params.att_max.zero();
 	_params.rate_max.zero();
 	_params.momt_const.zero();
-	_e_R_prev.zero();
 	_rates_prev.zero();
 	_rates_sp.zero();
 	_rates_sp_prev.zero();
 	_rates_int.zero();
-	_e_R_int.zero();
 	_thrust_sp = 0.0f;
 	_att_control.zero();
 
@@ -396,10 +382,8 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_params_handles.roll_integ_lim	=	param_find("TS_ROLL_INT_LIM");
 	_params_handles.roll_tc			= 	param_find("TS_ROLL_TC");
 	_params_handles.roll_rate_tc	=	param_find("TS_ROLL_RATE_TC");
-	_params_handles.roll_rate_i		=   param_find("TS_ROLL_RATE_I");
 	_params_handles.roll_max		=	param_find("TS_ROLL_MAX");
 	_params_handles.roll_rate_max	= 	param_find("TS_ROLL_RATE_MAX");
-	_params_handles.roll_rate_integ_lim 	=   param_find("TS_RRATE_INT_LIM");
 
 	_params_handles.pitch_p			= 	param_find("TS_PITCH_P");
 	_params_handles.pitch_i			=	param_find("TS_PITCH_I");
@@ -407,10 +391,8 @@ TailsitterAttitudeControl::TailsitterAttitudeControl() :
 	_params_handles.pitch_integ_lim	=	param_find("TS_PITCH_INT_LIM");
 	_params_handles.pitch_tc		= 	param_find("TS_PITCH_TC");
 	_params_handles.pitch_rate_tc	=	param_find("TS_PITCH_RATE_TC");
-	_params_handles.pitch_rate_i	=   param_find("TS_PITCH_RATE_I");
 	_params_handles.pitch_max		=	param_find("TS_PITCH_MAX");
 	_params_handles.pitch_rate_max	= 	param_find("TS_PITCH_RATE_MX");
-	_params_handles.pitch_rate_integ_lim 	=   param_find("TS_PRATE_INT_LIM");
 
 	_params_handles.yaw_p			= 	param_find("TS_YAW_P");
 	_params_handles.yaw_i			=	param_find("TS_YAW_I");
@@ -489,20 +471,15 @@ TailsitterAttitudeControl::parameters_update()
 	param_get(_params_handles.roll_i, &v);
 	_params.att_i(0) = v;
 	param_get(_params_handles.roll_d, &v);
-	_params.att_d(0) = v;
+	_params.att_d(0) = v * (ATTITUDE_TC_DEFAULT / roll_tc);
 	param_get(_params_handles.roll_integ_lim, &v);
 	_params.att_int_lim(0) = v;
 	param_get(_params_handles.roll_rate_tc, &v);
 	_params.rate_tc(0) = v;
-	param_get(_params_handles.roll_rate_i, &v);
-	_params.rate_i(0) = v;
 	param_get(_params_handles.roll_max, &v);
 	_params.att_max(0) = v;
 	param_get(_params_handles.roll_rate_max, &v);
 	_params.rate_max(0) = v;
-	param_get(_params_handles.roll_rate_integ_lim, &v);
-	_params.rate_int_lim(0) = v;
-
 
 	/* pitch gains */
 	param_get(_params_handles.pitch_p, &v);
@@ -515,14 +492,10 @@ TailsitterAttitudeControl::parameters_update()
 	_params.att_int_lim(1) = v;
 	param_get(_params_handles.pitch_rate_tc, &v);
 	_params.rate_tc(1) = v;
-	param_get(_params_handles.pitch_rate_i, &v);
-	_params.rate_i(1) = v;
 	param_get(_params_handles.pitch_max, &v);
 	_params.att_max(1) = v;
 	param_get(_params_handles.pitch_rate_max, &v);
 	_params.rate_max(1) = v;
-	param_get(_params_handles.pitch_rate_integ_lim, &v);
-	_params.rate_int_lim(1) = v;
 
 	/* yaw gains */
 	param_get(_params_handles.yaw_p, &v);
@@ -674,18 +647,6 @@ TailsitterAttitudeControl::battery_status_poll()
 }
 
 void
-TailsitterAttitudeControl::vehicle_status_poll()
-{
-	/* check if there is a new message */
-	bool updated;
-	orb_check(_v_status_sub, &updated);
-
-	if (updated) {
-		orb_copy(ORB_ID(vehicle_status), _v_status_sub, &_v_status);
-	}
-}
-
-void
 TailsitterAttitudeControl::publish_debug_tupple(int8_t *key, float value)
 {
 	memcpy(_dbg_tupple.key , key, 10);
@@ -788,24 +749,7 @@ TailsitterAttitudeControl::control_attitude(float dt)
 	}
 
 	/* calculate angular rates setpoint */
-	/* current body angular rates */
-	math::Vector<3> rates;
-	rates(0) = _ctrl_state.roll_rate;
-	rates(1) = _ctrl_state.pitch_rate;
-	rates(2) = _ctrl_state.yaw_rate;
-
-	//math::Vector<3> e_R_d = (e_R - _e_R_prev)/dt;
-
-	_e_R_int = _e_R_int + e_R * dt;
-
-	/* limit rates */
-	for (int i = 0 ; i < 3; i++){
-		_e_R_int(i) = math::constrain(_e_R_int(i), -_params.att_int_lim(i), _params.att_int_lim(i));
-	}
-
-	_rates_sp = _params.att_p.emult(e_R);// - _params.att_d.emult(rates) + _params.att_i.emult(_e_R_int);
-
-	//_e_R_prev = e_R;
+	_rates_sp = _params.att_p.emult(e_R);
 
 	/* limit rates */
 	for (int i = 0 ; i < 3; i++){
@@ -854,27 +798,11 @@ TailsitterAttitudeControl::control_attitude_rates(float dt)
 
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
-	math::Vector<3> rates_d = (_rates_prev - rates)/dt;
 
-	if (!PX4_ISFINITE(rates_err(0)) && !PX4_ISFINITE(rates_err(1)) && !PX4_ISFINITE(rates_err(2))) _rates_int = _rates_int +  rates_err * dt;
-
-	/* limit rates integral */
-	for (int i = 0 ; i < 3; i++){
-		_rates_int(i) = math::constrain(_rates_int(i), -_params.rate_int_lim(i), _params.rate_int_lim(i));
-	}
-
-	if (_v_status.nav_state == 	vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF){
-		_rates_int.zero();
-	}
-
-	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc) + (_J * _params.rate_i).emult(_rates_int);// + (_J * rates_d).emult(_params.att_d);
+	math::Vector<3> att_control1 = (_J * rates_err).edivide(_params.rate_tc);
 	math::Vector<3> att_control2 = rates % (_J * rates);
 
-	_rates_prev = rates;
-
 	_att_control = att_control1 + att_control2;
-
-
 
 	for (int i=0; i<3; i++){
 		float diff = _att_control(i) - _params.rate_max(i);
@@ -956,7 +884,6 @@ TailsitterAttitudeControl::task_main()
 	_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 	_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
 	_battery_status_sub = orb_subscribe(ORB_ID(battery_status));
-	_v_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 
 	/* Topic id */
 	_rates_sp_id = ORB_ID(vehicle_rates_setpoint);
@@ -1014,7 +941,6 @@ TailsitterAttitudeControl::task_main()
 			vehicle_manual_poll();
 			vehicle_motor_limits_poll();
 			battery_status_poll();
-			vehicle_status_poll();
 
 			if (_v_control_mode.flag_control_attitude_enabled) {
 
@@ -1166,7 +1092,6 @@ TailsitterAttitudeControl::task_main()
 					_rates_int.zero();
 					_thrust_sp = 0.0f;
 					_att_control.zero();
-					_e_R_int.zero();
 
 
 					/* publish actuator controls */
@@ -1278,7 +1203,7 @@ int ts_att_control_main(int argc, char *argv[])
 		if(argc == 3 && !strcmp(argv[2], "gazebo")){
 			ts_att_control::g_control->sitl_enabled = true;
 			PX4_INFO("sitl enabled");
-		}else{
+		} else {
 			PX4_INFO("sitl disabled");
 		}
 

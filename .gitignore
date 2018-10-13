@@ -88,3 +88,4 @@ coverage.info
 posix-configs/SITL/init/test/*_generated
 
 Tools/sdlog2/PX4Logs
+.metadata/

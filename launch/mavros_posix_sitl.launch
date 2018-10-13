@@ -11,7 +11,7 @@
 
     <arg name="est" default="lpe"/>
     <arg name="vehicle" default="hummingbird"/>
-    <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/apriltag.world"/>
+    <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/$(arg vehicle).world"/>
     <arg name="sdf" default="$(find mavlink_sitl_gazebo)/models/$(arg vehicle)/$(arg vehicle).sdf"/>
 
     <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg vehicle)"/>
@@ -54,6 +54,7 @@
         <arg name="pluginlists_yaml" value="$(arg pluginlists_yaml)" />
         <arg name="config_yaml" value="$(arg config_yaml)" />
     </include>
+
 </launch>
 
 <!-- vim: set et ft=xml fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->
