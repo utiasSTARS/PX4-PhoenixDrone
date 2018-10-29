@@ -1,11 +1,11 @@
 ## Hummingbird PX4 Pro Drone Autopilot ##
 
-This repository is built upon the original PX4 autopilot firmware repository: https://github.com/PX4/Firmware. It holds the flight control solution for Hummingbird, with the main applications located in the src/modules directory. It also contains the PX4 Drone Middleware Platform, which provides drivers and middleware to run drones.
+This repository is built upon the original PX4 autopilot firmware repository: https://github.com/PX4/Firmware. It holds the flight control solution for the Hummingbird, with the main applications located in the `src/modules` directory. It also contains the PX4 Drone Middleware Platform, which provides drivers and middleware to run drones.
 
 
-**If you use this software in academic work, please cite PX4 and our paper as per the README in the upper level repository.**
+**If you use this software in academic work, please cite PX4 and our paper as per the README in the top level repository.**
 
-To compile Hummingbird flight code for hardware (PixRacer), execute
+To compile the Hummingbird flight code for hardware (PixRacer), execute
 
 ```make nuttx_px4fmu-v4_tailsitter```
 
@@ -19,8 +19,8 @@ To run SITL (Software-in-the-Loop) simulation, execute the following after all t
 
 Our main contributions are:
 - `src/modules/mc_att_control`: Simplified position controller for Hummingbird position control
-- `src/modules/tc_att_control`: A custom attitude controller for Hummingbird with the control strategy outlined in our paper
-- `drivers/tsfmu`: A custom daemon inferring motor rotation speed from ESC sync pulses and regulates PWM signals delivered to ESC to enhance tracking of motor speed.
+- `src/modules/tc_att_control`: A custom attitude controller for the Hummingbird with the control strategy outlined in our paper
+- `drivers/tsfmu`: A custom daemon inferring motor rotation speed from ESC sync pulses and regulating PWM signals delivered to ESC to enhance tracking of motor speed
 
 ## Flight Hardware
-We tested the software on PixRacer (PX4FMUV4) flight computer. However, since all Pixhawk family uses the same ARM architecture, the flight code should be compatiable between all flight hardware supported by PX4. Our custom motor driver `tsfmu` needs to be modified such that the motor pulse signal PIN matches the specific hardware design and attention should also be paid to ensure there is no conflict between timer resources when porting to other platforms.
+We tested the software on a PixRacer (PX4FMUV4) flight computer. However, since the entire Pixhawk family uses the same ARM architecture, the flight code should be compatiable with all flight hardware supported by PX4. Our custom motor driver `tsfmu` needs to be modified such that the motor pulse signal PIN matches the specific hardware design and attention should also be paid to ensure there is no conflict between timer resources when porting to other platforms.
