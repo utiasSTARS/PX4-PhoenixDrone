@@ -85,7 +85,7 @@ land_detector start vtol
 navigator start
 attitude_estimator_q start
 local_position_estimator start
-mc_pos_control start
+ts_pos_control start
 mixer load /dev/pwm_output0 ROMFS/px4fmu_common/mixers/caipirinha_vtol.main.mix
 mavlink start -u 14556 -r 20000 -m config -o 14540 -v
 logger start -b 24 -t
