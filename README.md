@@ -1,11 +1,11 @@
-## Hummingbird PX4 Pro Drone Autopilot ##
+## Phoeix Drone PX4 Pro Drone Autopilot ##
 
-This repository is built upon the original PX4 autopilot firmware repository: https://github.com/PX4/Firmware. It holds the flight control solution for the Hummingbird, with the main applications located in the `src/modules` directory. It also contains the PX4 Drone Middleware Platform, which provides drivers and middleware to run drones.
+This repository is built upon the original PX4 autopilot firmware repository: https://github.com/PX4/Firmware. It holds the flight control solution for the Phoeix Drone, with the main applications located in the `src/modules` directory. It also contains the PX4 Drone Middleware Platform, which provides drivers and middleware to run drones.
 
 
 **If you use this software in academic work, please cite PX4 and our paper as per the README in the top level repository.**
 
-To compile the Hummingbird flight code for hardware (PixRacer), execute
+To compile the Phoeix Drone flight code for hardware (PixRacer), execute
 
 ```make nuttx_px4fmu-v4_tailsitter```
 
@@ -18,8 +18,8 @@ To run SITL (Software-in-the-Loop) simulation, execute the following after all t
 ```make posix_sitl_tailsitter gazebo_STARS_TS```
 
 Our main contributions are:
-- `src/modules/mc_att_control`: Simplified position controller for Hummingbird position control
-- `src/modules/tc_att_control`: A custom attitude controller for the Hummingbird with the control strategy outlined in our paper
+- `src/modules/mc_att_control`: Simplified position controller for Phoeix Drone position control
+- `src/modules/tc_att_control`: A custom attitude controller for the Phoeix Drone with the control strategy outlined in our paper
 - `drivers/tsfmu`: A custom daemon inferring motor rotation speed from ESC sync pulses and regulating PWM signals delivered to ESC to enhance tracking of motor speed
 
 ## Flight Hardware
